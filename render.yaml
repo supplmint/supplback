@@ -2,13 +2,17 @@ services:
   - type: web
     name: health-app-backend
     runtime: python
-    buildCommand: pip install --upgrade pip && pip install -r requirements.txt
+    buildCommand: pip install --upgrade pip setuptools wheel && CARGO_HOME=/tmp/cargo RUSTUP_HOME=/tmp/rustup pip install -r requirements.txt --prefer-binary
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: NODE_ENV
         value: production
       - key: PYTHON_VERSION
         value: 3.11.0
+      - key: CARGO_HOME
+        value: /tmp/cargo
+      - key: RUSTUP_HOME
+        value: /tmp/rustup
       - key: BOT_TOKEN
         sync: false  # Установите вручную в панели Render
       # Database - используйте либо DATABASE_URL (проще), либо отдельные параметры
