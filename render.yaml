@@ -2,7 +2,7 @@ services:
   - type: web
     name: health-app-backend
     runtime: python
-    buildCommand: pip install --upgrade pip setuptools wheel && CARGO_HOME=/tmp/cargo RUSTUP_HOME=/tmp/rustup pip install -r requirements.txt --prefer-binary
+    buildCommand: pip install --upgrade pip setuptools wheel && pip install -r requirements.txt --only-binary :all:
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: NODE_ENV
