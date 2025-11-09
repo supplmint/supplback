@@ -1,22 +1,27 @@
-# Health App - Backend
+# Health App - Backend (Python)
 
 Backend приложения для управления здоровьем с интеграцией Telegram WebApp.
 
 ## Технологии
 
-- Node.js + Express
+- Python 3.11+
+- FastAPI
 - PostgreSQL
-- TypeScript
+- SQLAlchemy
 - Telegram WebApp Authentication (HMAC-SHA256)
 
 ## Быстрый старт
 
 ```bash
-npm install
+# Установка зависимостей
+pip install -r requirements.txt
+
+# Настройка переменных окружения
 cp .env.example .env
-# Настройте переменные окружения в .env
-npm run migrate
-npm run dev
+# Заполните переменные в .env
+
+# Запуск
+uvicorn app.main:app --host 0.0.0.0 --port 3000
 ```
 
 ## API Endpoints
@@ -54,9 +59,14 @@ npm run dev
 - `recommendations` - JSONB с рекомендациями
 - `created_at`, `updated_at` - временные метки
 
+Для создания таблицы выполните миграцию:
+```bash
+psql "postgres://user:pass@host:port/db" -f migrations/init.sql
+```
+
 ## Развёртывание
 
-Развёртывается на Render или другом Node.js хостинге.
+Развёртывается на Render или другом Python хостинге.
 
 ## Лицензия
 
