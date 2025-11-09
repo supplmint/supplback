@@ -328,6 +328,34 @@ async def upload_file_to_webhook(
         if not file_received and response.status_code >= 200 and response.status_code < 300:
             print(f"⚠️ WARNING: Response doesn't indicate file was received. Response: {response_preview}")
         
+        # If 500 error, it might be due to file size or format
+        if response.status_code == 500:
+            error_detail = (
+                f"Webhook returned 500 Internal Server Error. "
+                f"This might be due to:\n"
+                f"1. File too large (current: {size} bytes, base64: {len(file_base64) if 'file_base64' in locals() else 'N/A'} chars)\n"
+                f"2. Webhook server cannot process the request\n"
+                f"3. Invalid data format\n"
+                f"Response: {response_preview}"
+            )
+            print(f"❌ {error_detail}")
+            # Still update database for tracking
+            user = queries.notify_upload(db, tgid, fileName, mimeType, size)
+            # Don't raise exception, return error info instead
+            return {
+                "success": False,
+                "fileName": fileName,
+                "mime": mimeType,
+                "size": size,
+                "webhookStatus": response.status_code,
+                "webhookResponse": response.text[:1000] if response.text else None,
+                "webhookHeaders": dict(response.headers),
+                "method": successful_method,
+                "fileReceived": False,
+                "error": "Webhook returned 500 error. Check logs for details.",
+                "analyses": user.analyses or {}
+            }
+        
         # Return response
         return {
             "success": response.status_code < 400,  # Consider 2xx and 3xx as success
