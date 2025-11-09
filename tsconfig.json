@@ -18,7 +18,7 @@
     "noImplicitThis": false,
     "alwaysStrict": false
   },
-  "include": ["src/**/*"],
+  "include": ["src/**/*", "src/globals.d.ts"],
   "exclude": ["node_modules", "dist"]
 }
 
