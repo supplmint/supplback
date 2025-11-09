@@ -140,23 +140,36 @@ async def notify_upload(
     }
 
 
+# Request model for analysis result
+class AnalysisResultRequest(BaseModel):
+    tgid: str
+    report: str
+    fileName: Optional[str] = None
+
+
 # POST /api/analyses/result - Receive analysis result from n8n (no auth required)
 @router.post("/analyses/result")
 async def receive_analysis_result(
-    tgid: str = Form(...),
-    report: str = Form(...),
-    fileName: Optional[str] = Form(None),
+    request: AnalysisResultRequest,
     db: Session = Depends(get_db)
 ):
-    """Receive analysis report from n8n and save to database"""
+    """Receive analysis report from n8n and save to database
+    
+    Accepts JSON body:
+    {
+        "tgid": "123456789",
+        "report": "текст отчета...",
+        "fileName": "analiz.jpg" (optional)
+    }
+    """
     print(f"=== Receiving analysis result from n8n ===")
-    print(f"TGID: {tgid}")
-    print(f"Report length: {len(report)} characters")
-    print(f"FileName: {fileName}")
+    print(f"TGID: {request.tgid}")
+    print(f"Report length: {len(request.report)} characters")
+    print(f"FileName: {request.fileName}")
     
     try:
         # Get or create user
-        user = queries.get_or_create_user(db, tgid)
+        user = queries.get_or_create_user(db, request.tgid)
         
         # Get current analyses
         current_analyses = user.analyses or {}
@@ -166,8 +179,8 @@ async def receive_analysis_result(
         reports = current_analyses.get("reports", [])
         
         new_report = {
-            "text": report,
-            "fileName": fileName or "unknown",
+            "text": request.report,
+            "fileName": request.fileName or "unknown",
             "createdAt": datetime.utcnow().isoformat(),
         }
         
@@ -182,13 +195,13 @@ async def receive_analysis_result(
         db.commit()
         db.refresh(user)
         
-        print(f"✅ Report saved successfully for user {tgid}")
+        print(f"✅ Report saved successfully for user {request.tgid}")
         
         return {
             "success": True,
             "message": "Report saved",
-            "tgid": tgid,
-            "reportLength": len(report)
+            "tgid": request.tgid,
+            "reportLength": len(request.report)
         }
     except Exception as e:
         print(f"❌ Error saving report: {e}")
