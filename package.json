@@ -7,8 +7,7 @@
     "dev": "tsx src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "migrate": "psql \"$PGCONN\" -f db/migrate.sql",
-    "postinstall": "npm run build"
+    "migrate": "psql \"$PGCONN\" -f db/migrate.sql"
   },
   "keywords": [],
   "author": "",
