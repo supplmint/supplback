@@ -18,6 +18,14 @@ router = APIRouter()
 async def test_endpoint():
     return {"message": "API router is working", "status": "ok"}
 
+# Test endpoint for upload-file (no auth, no file)
+@router.post("/upload-file-test")
+async def upload_file_test():
+    print("=" * 50)
+    print("UPLOAD FILE TEST ENDPOINT CALLED")
+    print("=" * 50)
+    return {"message": "Upload file endpoint is accessible", "status": "ok"}
+
 
 # Request models
 class UpdateProfileRequest(BaseModel):
@@ -141,12 +149,17 @@ async def upload_file_to_webhook(
     db: Session = Depends(get_db)
 ):
     """Proxy file upload to webhook"""
+    print("=" * 50)
+    print("UPLOAD FILE ENDPOINT CALLED - FUNCTION STARTED")
+    print("=" * 50)
+    
     # Get tgid from header (optional for now to debug 404)
     tgid = "unknown"
     if x_telegram_initdata:
         try:
             # Call the function directly with the header value
             tgid = get_tgid_from_header(x_telegram_initdata)
+            print(f"TGID extracted from header: {tgid}")
         except Exception as auth_err:
             print(f"Auth error (continuing anyway): {auth_err}")
             print(traceback.format_exc())
@@ -154,9 +167,6 @@ async def upload_file_to_webhook(
             tgid = "auth_failed"
     else:
         print("WARNING: No x-telegram-initdata header provided")
-    print("=" * 50)
-    print("UPLOAD FILE ENDPOINT CALLED")
-    print("=" * 50)
     print(f"Received file: {fileName}")
     print(f"File size: {size}")
     print(f"File type: {mimeType}")
