@@ -166,118 +166,122 @@ async def upload_file_to_webhook(
         last_error = None
         successful_method = None
         
-        import base64
-        file_base64 = base64.b64encode(file_content).decode('utf-8')
-        
-        print(f"=== File Encoding Info ===")
-        print(f"Original file size: {size} bytes")
-        print(f"Base64 encoded size: {len(file_base64)} bytes")
-        print(f"Size increase: {len(file_base64) / size:.2f}x")
-        
-        # Method 1: JSON with base64 file (PRIORITY - webhook accepts JSON)
+        # Method 1: Multipart form-data (PRIORITY - most webhooks expect this)
         try:
-            print("Trying method 1: JSON with base64 file...")
-            # Build JSON payload with file data
-            json_data = {
+            print("Trying method 1: multipart/form-data with file...")
+            files = {
+                'file': (fileName, file_content, mimeType)
+            }
+            data = {
                 'fileName': fileName,
                 'mimeType': mimeType,
-                'size': size,
+                'mime': mimeType,
+                'size': str(size),
                 'tgid': tgid,
-                'file': file_base64,  # Main field for file data
             }
             
-            # Log what we're sending (truncate base64 for logging)
-            print(f"JSON payload keys: {list(json_data.keys())}")
-            print(f"JSON payload size: ~{len(str(json_data))} characters")
-            print(f"File data length (base64): {len(file_base64)} characters")
-            print(f"First 100 chars of base64: {file_base64[:100]}...")
+            print(f"Sending multipart form-data:")
+            print(f"  File: {fileName} ({size} bytes, {mimeType})")
+            print(f"  Data fields: {list(data.keys())}")
             
             response = requests.post(
                 webhook_url,
-                json=json_data,
-                headers={
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                    'User-Agent': 'suppl-backend/1.0',
-                },
+                files=files,
+                data=data,
                 timeout=45,
                 allow_redirects=True
             )
             
-            print(f"Method 1 (JSON) response: {response.status_code}")
+            print(f"Method 1 (multipart) response: {response.status_code}")
             print(f"Method 1 response headers: {dict(response.headers)}")
             response_text = response.text[:500] if response.text else 'No response'
             print(f"Method 1 response preview: {response_text}")
             
-            # Log request details for debugging
-            print(f"Request URL: {webhook_url}")
-            print(f"Request method: POST")
-            print(f"Request content-type: application/json")
-            
-            if response.status_code < 500:  # Accept any response except server errors
-                successful_method = "Method 1 (JSON with base64)"
+            if response.status_code < 500:
+                successful_method = "Method 1 (multipart/form-data)"
                 print(f"✅ Using {successful_method}")
-                # Check if file data is in response (meaning it was received)
-                if fileName.lower() in response.text.lower() or response.status_code in [200, 201, 202]:
-                    print(f"✅ File appears to be received by webhook")
-                else:
-                    print(f"⚠️ Warning: Response doesn't confirm file receipt")
+                if response.status_code in [200, 201, 202]:
+                    print(f"✅ File uploaded successfully")
         except Exception as e1:
             last_error = e1
             print(f"Method 1 failed: {e1}")
             import traceback
             print(traceback.format_exc())
         
-        # Only try other methods if JSON failed or returned 500 error
-        # But if JSON returned 200-499, we consider it successful (even if it's not ideal)
-        if response is None or (response.status_code >= 500 and last_error is not None):
-            # Method 2: Multipart form-data with 'file' field
+        # Method 2: JSON with base64 file (fallback)
+        if response is None or response.status_code >= 500:
             try:
-                print("Trying method 2: multipart/form-data with 'file' field...")
-                files = {
-                    'file': (fileName, file_content, mimeType),
-                    'upload': (fileName, file_content, mimeType),  # Alternative field name
-                }
-                data = {
+                print("Trying method 2: JSON with base64 file...")
+                import base64
+                file_base64 = base64.b64encode(file_content).decode('utf-8')
+                
+                print(f"=== File Encoding Info ===")
+                print(f"Original file size: {size} bytes")
+                print(f"Base64 encoded size: {len(file_base64)} bytes")
+                print(f"Size increase: {len(file_base64) / size:.2f}x")
+                
+                # Build JSON payload with file data
+                json_data = {
                     'fileName': fileName,
                     'mimeType': mimeType,
-                    'size': str(size),
+                    'size': size,
                     'tgid': tgid,
+                    'file': file_base64,
                 }
+                
+                # Log what we're sending (truncate base64 for logging)
+                print(f"JSON payload keys: {list(json_data.keys())}")
+                print(f"JSON payload size: ~{len(str(json_data))} characters")
+                print(f"File data length (base64): {len(file_base64)} characters")
+                
                 response = requests.post(
                     webhook_url,
-                    files=files,
-                    data=data,
+                    json=json_data,
+                    headers={
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'User-Agent': 'suppl-backend/1.0',
+                    },
                     timeout=45,
                     allow_redirects=True
                 )
-                print(f"Method 2 (multipart) response: {response.status_code}")
+                
+                print(f"Method 2 (JSON) response: {response.status_code}")
+                print(f"Method 2 response headers: {dict(response.headers)}")
+                response_text = response.text[:500] if response.text else 'No response'
+                print(f"Method 2 response preview: {response_text}")
+                
                 if response.status_code < 500:
-                    successful_method = "Method 2 (multipart with fields)"
+                    successful_method = "Method 2 (JSON with base64)"
                     print(f"✅ Using {successful_method}")
             except Exception as e2:
                 last_error = e2
                 print(f"Method 2 failed: {e2}")
-                
-                # Method 3: Only file in multipart
-                try:
-                    print("Trying method 3: multipart file only...")
-                    files = {
-                        'file': (fileName, file_content, mimeType)
-                    }
-                    response = requests.post(
-                        webhook_url,
-                        files=files,
-                        timeout=45,
-                        allow_redirects=True
-                    )
-                    print(f"Method 3 (multipart file only) response: {response.status_code}")
-                    if response.status_code < 500:
-                        successful_method = "Method 3 (multipart file only)"
-                        print(f"✅ Using {successful_method}")
-                except Exception as e3:
-                    last_error = e3
-                    print(f"Method 3 failed: {e3}")
+                import traceback
+                print(traceback.format_exc())
+        
+        # Method 3: Only file, no extra fields (last resort)
+        if response is None or response.status_code >= 500:
+            try:
+                print("Trying method 3: multipart file only (no extra fields)...")
+                files = {
+                    'file': (fileName, file_content, mimeType)
+                }
+                response = requests.post(
+                    webhook_url,
+                    files=files,
+                    timeout=45,
+                    allow_redirects=True
+                )
+                print(f"Method 3 (multipart file only) response: {response.status_code}")
+                if response.status_code < 500:
+                    successful_method = "Method 3 (multipart file only)"
+                    print(f"✅ Using {successful_method}")
+            except Exception as e3:
+                last_error = e3
+                print(f"Method 3 failed: {e3}")
+                import traceback
+                print(traceback.format_exc())
         
         if response is None:
             raise HTTPException(
