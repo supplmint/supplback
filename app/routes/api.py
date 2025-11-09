@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Header, HTTPException, status, UploadFile, File, Form
+from fastapi import APIRouter, Depends, Header, HTTPException, status, UploadFile, File, Form, Request
 from sqlalchemy.orm import Session
 from typing import Dict, Any, Optional
 from pydantic import BaseModel
@@ -140,33 +140,87 @@ async def notify_upload(
     }
 
 
+# Request model for analysis result (JSON)
+class AnalysisResultRequest(BaseModel):
+    tgid: str
+    report: str
+    fileName: Optional[str] = None
+
+
 # POST /api/analyses/result - Receive analysis result from n8n (no auth required)
-# Accepts Form-Data (multipart/form-data) - лучше для многострочного текста
+# Accepts both JSON and Form-Data for flexibility
 @router.post("/analyses/result")
 async def receive_analysis_result(
-    tgid: str = Form(...),
-    report: str = Form(...),
+    raw_request: Request,
+    request_data: Optional[AnalysisResultRequest] = None,
+    tgid: Optional[str] = Form(None),
+    report: Optional[str] = Form(None),
     fileName: Optional[str] = Form(None),
     db: Session = Depends(get_db)
 ):
     """Receive analysis report from n8n and save to database
     
-    Accepts Form-Data (multipart/form-data):
-    - tgid: Telegram user ID (required)
-    - report: Report text (required, can be multiline)
-    - fileName: File name (optional)
+    Accepts both formats:
+    1. JSON body: {"tgid": "...", "report": "...", "fileName": "..."}
+    2. Form-Data: tgid, report, fileName as form fields
+    3. Nested JSON: {"body": {"tgid": "...", "report": "..."}}
     
-    This format is better for multiline text from n8n.
+    n8n can send any of these formats.
     """
     print(f"=== Receiving analysis result from n8n ===")
-    print(f"TGID: {tgid}")
-    print(f"Report length: {len(report)} characters")
-    print(f"FileName: {fileName}")
-    print(f"First 200 chars of report: {report[:200]}...")
+    
+    tgid_value = None
+    report_value = None
+    fileName_value = None
+    
+    # Try to get data from JSON first (Pydantic model)
+    if request_data:
+        tgid_value = request_data.tgid
+        report_value = request_data.report
+        fileName_value = request_data.fileName
+        print("Received as JSON (Pydantic model)")
+    # Try Form-Data
+    elif tgid and report:
+        tgid_value = tgid
+        report_value = report
+        fileName_value = fileName
+        print("Received as Form-Data")
+    # Try to parse raw request body (for nested JSON from n8n)
+    else:
+        try:
+            content_type = raw_request.headers.get("content-type", "")
+            if "application/json" in content_type:
+                json_data = await raw_request.json()
+                print(f"Raw JSON received: {list(json_data.keys()) if isinstance(json_data, dict) else 'not a dict'}")
+                
+                # Handle nested body structure from n8n: {"body": {"tgid": "...", "report": "..."}}
+                if isinstance(json_data, dict):
+                    if "body" in json_data and isinstance(json_data["body"], dict):
+                        # n8n sometimes wraps data in "body"
+                        json_data = json_data["body"]
+                        print("Unwrapped nested 'body' structure")
+                    tgid_value = json_data.get("tgid")
+                    report_value = json_data.get("report")
+                    fileName_value = json_data.get("fileName")
+                    print("Received as nested JSON from raw request")
+        except Exception as e:
+            print(f"Error parsing raw request: {e}")
+            print(traceback.format_exc())
+    
+    if not tgid_value or not report_value:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Missing required fields: tgid and report. Send as JSON {\"tgid\": \"...\", \"report\": \"...\"} or Form-Data."
+        )
+    
+    print(f"TGID: {tgid_value}")
+    print(f"Report length: {len(report_value)} characters")
+    print(f"FileName: {fileName_value}")
+    print(f"First 200 chars of report: {report_value[:200]}...")
     
     try:
         # Get or create user
-        user = queries.get_or_create_user(db, tgid)
+        user = queries.get_or_create_user(db, tgid_value)
         
         # Get current analyses (preserve existing data like last_upload, upload_history)
         current_analyses = user.analyses or {}
@@ -176,8 +230,8 @@ async def receive_analysis_result(
         reports = current_analyses.get("reports", [])
         
         new_report = {
-            "text": report,
-            "fileName": fileName or "unknown",
+            "text": report_value,
+            "fileName": fileName_value or "unknown",
             "createdAt": datetime.utcnow().isoformat(),
         }
         
@@ -195,7 +249,7 @@ async def receive_analysis_result(
         db.commit()
         db.refresh(user)
         
-        print(f"✅ Report saved successfully for user {tgid}")
+        print(f"✅ Report saved successfully for user {tgid_value}")
         print(f"Current analyses keys: {list(current_analyses.keys())}")
         print(f"Reports count: {len(reports)}")
         print(f"Last report exists: {'last_report' in current_analyses}")
@@ -203,8 +257,8 @@ async def receive_analysis_result(
         return {
             "success": True,
             "message": "Report saved",
-            "tgid": tgid,
-            "reportLength": len(report),
+            "tgid": tgid_value,
+            "reportLength": len(report_value),
             "analysesKeys": list(current_analyses.keys())
         }
     except Exception as e:
