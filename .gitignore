@@ -36,3 +36,5 @@ logs/
 # Frontend (not included in this repo)
 frontend/
 
+# Backend folder (old location, not used anymore)
+backend/
