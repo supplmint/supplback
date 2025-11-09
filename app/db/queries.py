@@ -60,13 +60,22 @@ def update_recommendations(db: Session, tgid: str, recommendations: Dict[str, An
 
 
 def notify_upload(db: Session, tgid: str, file_name: str, mime: str, size: int) -> HealthApp:
-    """Update analyses with upload notification"""
+    """Update analyses with upload notification
+    
+    NOTE: This function is kept for backward compatibility but should not be used
+    if analyses should only contain reports from HTTP Request.
+    Upload data should be stored separately or not stored in analyses field.
+    """
     user = get_or_create_user(db, tgid)
     
-    # Get current analyses
+    # Get current analyses (preserve existing reports)
     current_analyses = user.analyses or {}
     
-    # Update last_upload and history
+    # Preserve existing reports if they exist
+    reports = current_analyses.get("reports", [])
+    last_report = current_analyses.get("last_report")
+    
+    # Update last_upload and history (but preserve reports)
     upload_info = {
         "fileName": file_name,
         "mime": mime,
@@ -74,12 +83,23 @@ def notify_upload(db: Session, tgid: str, file_name: str, mime: str, size: int) 
         "uploadedAt": datetime.utcnow().isoformat(),
     }
     
-    current_analyses["last_upload"] = upload_info
+    # Only add upload data if we're not using analyses for reports only
+    # For now, we'll preserve both, but the user wants analyses to contain only reports
+    # So we'll skip adding upload data here
+    # current_analyses["last_upload"] = upload_info
+    # upload_history = current_analyses.get("upload_history", [])
+    # upload_history.append(upload_info)
+    # current_analyses["upload_history"] = upload_history
     
-    # Add to history
-    upload_history = current_analyses.get("upload_history", [])
-    upload_history.append(upload_info)
-    current_analyses["upload_history"] = upload_history
+    # Keep only reports in analyses
+    if reports or last_report:
+        current_analyses = {
+            "reports": reports,
+            "last_report": last_report
+        }
+    else:
+        # If no reports, keep empty
+        current_analyses = {}
     
     user.analyses = current_analyses
     user.updated_at = datetime.utcnow()

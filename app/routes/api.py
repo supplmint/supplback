@@ -222,44 +222,42 @@ async def receive_analysis_result(
         # Get or create user
         user = queries.get_or_create_user(db, tgid_value)
         
-        # Get current analyses (preserve existing data like last_upload, upload_history)
+        # Get existing reports only (ignore last_upload, upload_history - they are not part of analyses)
         current_analyses = user.analyses or {}
-        
-        # Add report to analyses
-        # Structure: { "reports": [{"text": "...", "fileName": "...", "createdAt": "..."}], "last_report": {...} }
         reports = current_analyses.get("reports", [])
         
+        # Create new report
         new_report = {
             "text": report_value,
             "fileName": fileName_value or "unknown",
             "createdAt": datetime.utcnow().isoformat(),
         }
         
+        # Add to reports list
         reports.append(new_report)
-        current_analyses["reports"] = reports
-        current_analyses["last_report"] = new_report  # Save last report for quick access
         
-        # Preserve existing upload data (last_upload, upload_history) if they exist
-        # Don't overwrite them
-        
-        # Update database
-        user.analyses = current_analyses
+        # Save ONLY report data in analyses (no last_upload, upload_history)
+        # analyses should contain only what comes from HTTP Request (reports)
+        user.analyses = {
+            "reports": reports,
+            "last_report": new_report  # Save last report for quick access
+        }
         user.updated_at = datetime.utcnow()
         
         db.commit()
         db.refresh(user)
         
         print(f"✅ Report saved successfully for user {tgid_value}")
-        print(f"Current analyses keys: {list(current_analyses.keys())}")
+        print(f"Analyses now contains only reports (no upload data)")
         print(f"Reports count: {len(reports)}")
-        print(f"Last report exists: {'last_report' in current_analyses}")
+        print(f"Last report exists: True")
         
         return {
             "success": True,
             "message": "Report saved",
             "tgid": tgid_value,
             "reportLength": len(report_value),
-            "analysesKeys": list(current_analyses.keys())
+            "analysesKeys": list(user.analyses.keys())
         }
     except Exception as e:
         print(f"❌ Error saving report: {e}")
