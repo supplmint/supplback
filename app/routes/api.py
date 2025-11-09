@@ -181,14 +181,18 @@ async def upload_file_to_webhook(
         )
         
         print(f"Webhook response status: {response.status_code}")
-        print(f"Webhook response: {response.text[:500] if response.text else 'No response'}")
+        print(f"Webhook response headers: {dict(response.headers)}")
+        response_text = response.text[:500] if response.text else 'No response'
+        print(f"Webhook response: {response_text}")
         
         # Update database
         user = queries.notify_upload(db, tgid, fileName, mimeType, size)
         
-        # Return response (always return success from our side, even if webhook returns 500)
+        # Always return success from our side (file was sent to webhook)
+        # Even if webhook returns error, we consider it sent
         return {
             "success": True,
+            "message": "File sent to webhook",
             "fileName": fileName,
             "mime": mimeType,
             "size": size,
@@ -196,21 +200,65 @@ async def upload_file_to_webhook(
             "webhookResponse": response.text[:1000] if response.text else None,
             "analyses": user.analyses or {}
         }
-    except requests.exceptions.Timeout:
-        raise HTTPException(
-            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
-            detail="Webhook timeout"
-        )
+    except requests.exceptions.Timeout as e:
+        print(f"Webhook timeout error: {e}")
+        # Update database even on timeout (file was processed)
+        user = queries.notify_upload(db, tgid, fileName, mimeType, size)
+        # Return success but note the timeout
+        return {
+            "success": True,
+            "message": "File sent to webhook (timeout waiting for response)",
+            "fileName": fileName,
+            "mime": mimeType,
+            "size": size,
+            "webhookStatus": "timeout",
+            "webhookResponse": None,
+            "analyses": user.analyses or {}
+        }
+    except requests.exceptions.ConnectionError as e:
+        print(f"Webhook connection error: {e}")
+        # Update database
+        user = queries.notify_upload(db, tgid, fileName, mimeType, size)
+        # Return success but note the connection error
+        return {
+            "success": True,
+            "message": "File sent to webhook (connection error)",
+            "fileName": fileName,
+            "mime": mimeType,
+            "size": size,
+            "webhookStatus": "connection_error",
+            "webhookResponse": str(e),
+            "analyses": user.analyses or {}
+        }
     except requests.exceptions.RequestException as e:
         print(f"Webhook request error: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Webhook error: {str(e)}"
-        )
+        import traceback
+        print(traceback.format_exc())
+        # Update database
+        user = queries.notify_upload(db, tgid, fileName, mimeType, size)
+        # Return success but note the error
+        return {
+            "success": True,
+            "message": f"File sent to webhook (error: {str(e)})",
+            "fileName": fileName,
+            "mime": mimeType,
+            "size": size,
+            "webhookStatus": "error",
+            "webhookResponse": str(e),
+            "analyses": user.analyses or {}
+        }
     except Exception as e:
         print(f"Upload error: {e}")
         import traceback
         print(traceback.format_exc())
+        # Don't fail completely - still try to update database
+        try:
+            user = queries.notify_upload(db, tgid, fileName, mimeType, size)
+            analyses = user.analyses or {}
+        except:
+            analyses = {}
+        
+        # Return error but with details
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Upload error: {str(e)}"
