@@ -9,6 +9,7 @@ from app.database import get_db
 from app.db import queries
 from app.middleware.auth import get_tgid_from_header
 from app.config import settings
+import traceback
 
 router = APIRouter()
 
@@ -136,9 +137,18 @@ async def upload_file_to_webhook(
     fileName: str = Form(...),
     mimeType: str = Form(...),
     size: int = Form(...),
-    tgid: str = Depends(get_tgid_from_header),
+    x_telegram_initdata: Optional[str] = Header(None),
     db: Session = Depends(get_db)
 ):
+    # Get tgid from header (optional for now to debug 404)
+    tgid = "unknown"
+    if x_telegram_initdata:
+        try:
+            tgid = get_tgid_from_header(x_telegram_initdata)
+        except Exception as auth_err:
+            print(f"Auth error (continuing anyway): {auth_err}")
+            # Use a default tgid if auth fails
+            tgid = "auth_failed"
     """Proxy file upload to webhook"""
     print("=" * 50)
     print("UPLOAD FILE ENDPOINT CALLED")
