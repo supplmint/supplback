@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, status, UploadFil
 from sqlalchemy.orm import Session
 from typing import Dict, Any, Optional
 from pydantic import BaseModel
+from datetime import datetime
 import requests
 import os
 
@@ -55,7 +56,8 @@ async def get_me(
     user = queries.get_or_create_user(db, tgid)
     return {
         "tgid": user.tgid,
-        "profile": user.profile or {}
+        "profile": user.profile or {},
+        "analyses": user.analyses or {}
     }
 
 
@@ -136,6 +138,65 @@ async def notify_upload(
         "size": request.size,
         "analyses": user.analyses or {}
     }
+
+
+# POST /api/analyses/result - Receive analysis result from n8n (no auth required)
+@router.post("/analyses/result")
+async def receive_analysis_result(
+    tgid: str = Form(...),
+    report: str = Form(...),
+    fileName: Optional[str] = Form(None),
+    db: Session = Depends(get_db)
+):
+    """Receive analysis report from n8n and save to database"""
+    print(f"=== Receiving analysis result from n8n ===")
+    print(f"TGID: {tgid}")
+    print(f"Report length: {len(report)} characters")
+    print(f"FileName: {fileName}")
+    
+    try:
+        # Get or create user
+        user = queries.get_or_create_user(db, tgid)
+        
+        # Get current analyses
+        current_analyses = user.analyses or {}
+        
+        # Add report to analyses
+        # Structure: { "reports": [{"text": "...", "fileName": "...", "createdAt": "..."}] }
+        reports = current_analyses.get("reports", [])
+        
+        new_report = {
+            "text": report,
+            "fileName": fileName or "unknown",
+            "createdAt": datetime.utcnow().isoformat(),
+        }
+        
+        reports.append(new_report)
+        current_analyses["reports"] = reports
+        current_analyses["last_report"] = new_report  # Save last report for quick access
+        
+        # Update database
+        user.analyses = current_analyses
+        user.updated_at = datetime.utcnow()
+        
+        db.commit()
+        db.refresh(user)
+        
+        print(f"✅ Report saved successfully for user {tgid}")
+        
+        return {
+            "success": True,
+            "message": "Report saved",
+            "tgid": tgid,
+            "reportLength": len(report)
+        }
+    except Exception as e:
+        print(f"❌ Error saving report: {e}")
+        print(traceback.format_exc())
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error saving report: {str(e)}"
+        )
 
 
 # POST /api/upload-file - Upload file to webhook (proxy)
