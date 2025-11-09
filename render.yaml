@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: health-app-backend
+    runtime: node
+    rootDir: backend
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+      - key: BOT_TOKEN
+        sync: false  # Установите вручную в панели Render
+      - key: PGHOST
+        sync: false  # Установите вручную в панели Render
+      - key: PGPORT
+        value: 5432
+      - key: PGDATABASE
+        sync: false  # Установите вручную в панели Render
+      - key: PGUSER
+        sync: false  # Установите вручную в панели Render
+      - key: PGPASSWORD
+        sync: false  # Установите вручную в панели Render
+
