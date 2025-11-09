@@ -45,20 +45,13 @@ logs/
 node_modules/
 package-lock.json
 
-# Frontend build
-frontend/dist/
-frontend/node_modules/
+# Frontend (not in this repo)
+frontend/
 
 # Firebase
 .firebase/
 firebase-debug.log
 firebase-debug.*.log
-
-# Old TypeScript backend (removed, now using Python)
-# src/
-# tsconfig.json
-# package.json
-# package-lock.json
-# node_modules/
-# .npmrc
-# dist/
+firebase.json
+.firebaserc
+storage.rules
