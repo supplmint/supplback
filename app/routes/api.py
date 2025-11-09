@@ -250,6 +250,19 @@ async def upload_file_to_webhook(
     print(f"File type: {mimeType}")
     print(f"TGID: {tgid}")
     
+    # Get user profile data from database
+    profile_data = {}
+    if tgid != "unknown" and tgid != "auth_failed":
+        try:
+            user = queries.get_or_create_user(db, tgid)
+            profile_data = user.profile or {}
+            print(f"Profile data loaded: {list(profile_data.keys()) if profile_data else 'empty'}")
+        except Exception as profile_err:
+            print(f"Warning: Could not load profile data: {profile_err}")
+            profile_data = {}
+    else:
+        print("Skipping profile load - invalid tgid")
+    
     webhook_url = settings.ANALYSIS_WEBHOOK_URL
     print(f"Webhook URL from settings: {webhook_url}")
     
@@ -276,26 +289,28 @@ async def upload_file_to_webhook(
         file_base64 = base64.b64encode(file_content).decode('utf-8')
         print(f"File encoded to base64: {len(file_base64)} characters")
         
-        # Build JSON payload with base64 file for n8n
+        # Build JSON payload with base64 file and profile data for n8n
         json_data = {
             'fileName': fileName,
             'mimeType': mimeType,
             'size': size,
             'tgid': tgid,
             'file': file_base64,  # Base64 encoded image
+            'profile': profile_data,  # User profile data from database
         }
         
         print(f"Building JSON payload for n8n...")
         print(f"JSON keys: {list(json_data.keys())}")
         print(f"JSON size: {len(str(json_data))} characters")
         print(f"Base64 data length: {len(file_base64)} characters")
+        print(f"Profile data keys: {list(profile_data.keys()) if profile_data else 'none'}")
         print(f"First 100 chars of base64: {file_base64[:100]}...")
         
         # Send to n8n webhook
         # IMPORTANT: n8n webhooks should be configured to accept POST, not GET
         # GET requests cannot send file data (URL length limit)
         print(f"Sending POST request with JSON to n8n webhook: {webhook_url}")
-        print(f"Payload contains: fileName, mimeType, size, tgid, file (base64)")
+        print(f"Payload contains: fileName, mimeType, size, tgid, file (base64), profile")
         print(f"Total payload size: {len(str(json_data))} characters")
         
         try:
