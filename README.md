@@ -1,16 +1,16 @@
-# Health App - Backend (Python)
+# Health App - Backend & Frontend
 
-Backend приложения для управления здоровьем с интеграцией Telegram WebApp.
+Полнофункциональное приложение для управления здоровьем с интеграцией Telegram WebApp.
 
-## Технологии
+## Структура проекта
 
-- Python 3.11+
-- FastAPI
-- PostgreSQL
-- SQLAlchemy
-- Telegram WebApp Authentication (HMAC-SHA256)
+- `app/` - Python (FastAPI) бэкенд
+- `frontend/` - React + TypeScript фронтенд
+- `migrations/` - SQL миграции для базы данных
 
-## Быстрый старт
+## Backend (Python + FastAPI)
+
+### Быстрый старт
 
 ```bash
 # Установка зависимостей
@@ -24,49 +24,70 @@ cp .env.example .env
 uvicorn app.main:app --host 0.0.0.0 --port 3000
 ```
 
-## API Endpoints
+### API Endpoints
 
-### GET /health
-Проверка здоровья сервера.
+- `GET /health` - проверка здоровья сервера
+- `GET /api/me` - получить/создать пользователя (требует аутентификацию)
+- `POST /api/me` - обновить профиль (требует аутентификацию)
+- `POST /api/analyses/summary` - обновить анализы (требует аутентификацию)
+- `POST /api/reco/basic` - обновить рекомендации (требует аутентификацию)
+- `POST /api/notify-upload` - уведомить о загрузке файла (требует аутентификацию)
 
-### GET /api/me (требует аутентификацию)
-Получить или создать пользователя. Возвращает `tgid` и `profile`.
+### Развёртывание на Render
 
-### POST /api/me (требует аутентификацию)
-Обновить профиль пользователя. Принимает `{ profile: {...} }`.
+Развёртывается на Render.com с Python runtime.
 
-### POST /api/analyses/summary (требует аутентификацию)
-Обновить анализы пользователя. Принимает `{ analyses: {...} }`.
+## Frontend (React + TypeScript + Vite)
 
-### POST /api/reco/basic (требует аутентификацию)
-Обновить рекомендации пользователя. Принимает `{ recommendations: {...} }`.
+### Быстрый старт
 
-### POST /api/notify-upload (требует аутентификацию)
-Уведомить о загрузке файла. Принимает `{ fileName: string, mime: string, size: number }`.
-
-## Аутентификация
-
-Все защищённые маршруты требуют заголовок `x-telegram-initdata` с данными инициализации Telegram WebApp.
-
-Сервер проверяет подпись данных используя HMAC-SHA256 алгоритм и извлекает `tgid` из поля `user.id`.
-
-## База данных
-
-Таблица `health_app` хранит:
-- `tgid` - уникальный идентификатор Telegram пользователя
-- `profile` - JSONB с данными профиля
-- `analyses` - JSONB с анализами
-- `recommendations` - JSONB с рекомендациями
-- `created_at`, `updated_at` - временные метки
-
-Для создания таблицы выполните миграцию:
 ```bash
-psql "postgres://user:pass@host:port/db" -f migrations/init.sql
+cd frontend
+npm install
+cp .env.example .env
+# Настройте VITE_API_BASE_URL в .env
+npm run dev
 ```
 
-## Развёртывание
+### Развёртывание на Firebase Hosting
 
-Развёртывается на Render или другом Python хостинге.
+```bash
+# Установите Firebase CLI
+npm install -g firebase-tools
+
+# Войдите в Firebase
+firebase login
+
+# Соберите проект
+cd frontend
+npm run build
+
+# Деплой
+cd ..
+firebase deploy --only hosting
+```
+
+Или используйте скрипт:
+```bash
+cd frontend
+npm run deploy
+```
+
+## Технологии
+
+### Backend
+- Python 3.11+
+- FastAPI
+- PostgreSQL (Supabase)
+- SQLAlchemy
+- Telegram WebApp Authentication (HMAC-SHA256)
+
+### Frontend
+- React 18
+- TypeScript
+- Vite
+- Firebase (Storage, Hosting)
+- Telegram WebApp SDK
 
 ## Лицензия
 

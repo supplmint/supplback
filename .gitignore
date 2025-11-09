@@ -41,6 +41,19 @@ logs/
 *.tmp
 *.temp
 
+# Node modules
+node_modules/
+package-lock.json
+
+# Frontend build
+frontend/dist/
+frontend/node_modules/
+
+# Firebase
+.firebase/
+firebase-debug.log
+firebase-debug.*.log
+
 # Old TypeScript backend (removed, now using Python)
 # src/
 # tsconfig.json
