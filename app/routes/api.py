@@ -169,23 +169,28 @@ async def upload_file_to_webhook(
         import base64
         file_base64 = base64.b64encode(file_content).decode('utf-8')
         
+        print(f"=== File Encoding Info ===")
+        print(f"Original file size: {size} bytes")
+        print(f"Base64 encoded size: {len(file_base64)} bytes")
+        print(f"Size increase: {len(file_base64) / size:.2f}x")
+        
         # Method 1: JSON with base64 file (PRIORITY - webhook accepts JSON)
         try:
             print("Trying method 1: JSON with base64 file...")
+            # Build JSON payload with file data
             json_data = {
                 'fileName': fileName,
                 'mimeType': mimeType,
-                'mime': mimeType,  # Alternative field name
                 'size': size,
                 'tgid': tgid,
-                'file': file_base64,
-                'fileData': file_base64,  # Alternative field name
-                'data': file_base64,  # Another alternative
-                'content': file_base64,  # Another alternative
-                'image': file_base64 if 'image' in mimeType else None,  # For images
+                'file': file_base64,  # Main field for file data
             }
-            # Remove None values
-            json_data = {k: v for k, v in json_data.items() if v is not None}
+            
+            # Log what we're sending (truncate base64 for logging)
+            print(f"JSON payload keys: {list(json_data.keys())}")
+            print(f"JSON payload size: ~{len(str(json_data))} characters")
+            print(f"File data length (base64): {len(file_base64)} characters")
+            print(f"First 100 chars of base64: {file_base64[:100]}...")
             
             response = requests.post(
                 webhook_url,
@@ -193,24 +198,39 @@ async def upload_file_to_webhook(
                 headers={
                     'Content-Type': 'application/json',
                     'Accept': 'application/json',
+                    'User-Agent': 'suppl-backend/1.0',
                 },
                 timeout=45,
                 allow_redirects=True
             )
+            
             print(f"Method 1 (JSON) response: {response.status_code}")
-            print(f"Method 1 response preview: {response.text[:200] if response.text else 'No response'}")
+            print(f"Method 1 response headers: {dict(response.headers)}")
+            response_text = response.text[:500] if response.text else 'No response'
+            print(f"Method 1 response preview: {response_text}")
+            
+            # Log request details for debugging
+            print(f"Request URL: {webhook_url}")
+            print(f"Request method: POST")
+            print(f"Request content-type: application/json")
+            
             if response.status_code < 500:  # Accept any response except server errors
                 successful_method = "Method 1 (JSON with base64)"
                 print(f"✅ Using {successful_method}")
                 # Check if file data is in response (meaning it was received)
                 if fileName.lower() in response.text.lower() or response.status_code in [200, 201, 202]:
                     print(f"✅ File appears to be received by webhook")
+                else:
+                    print(f"⚠️ Warning: Response doesn't confirm file receipt")
         except Exception as e1:
             last_error = e1
             print(f"Method 1 failed: {e1}")
+            import traceback
+            print(traceback.format_exc())
         
-        # Only try other methods if JSON failed or returned error
-        if response is None or response.status_code >= 500:
+        # Only try other methods if JSON failed or returned 500 error
+        # But if JSON returned 200-499, we consider it successful (even if it's not ideal)
+        if response is None or (response.status_code >= 500 and last_error is not None):
             # Method 2: Multipart form-data with 'file' field
             try:
                 print("Trying method 2: multipart/form-data with 'file' field...")
