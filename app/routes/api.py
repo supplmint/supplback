@@ -12,6 +12,11 @@ from app.config import settings
 
 router = APIRouter()
 
+# Test endpoint to verify routing works
+@router.get("/test")
+async def test_endpoint():
+    return {"message": "API router is working", "status": "ok"}
+
 
 # Request models
 class UpdateProfileRequest(BaseModel):
@@ -135,16 +140,29 @@ async def upload_file_to_webhook(
     db: Session = Depends(get_db)
 ):
     """Proxy file upload to webhook"""
+    print("=" * 50)
+    print("UPLOAD FILE ENDPOINT CALLED")
+    print("=" * 50)
+    print(f"Received file: {fileName}")
+    print(f"File size: {size}")
+    print(f"File type: {mimeType}")
+    print(f"TGID: {tgid}")
+    
     webhook_url = settings.ANALYSIS_WEBHOOK_URL
+    print(f"Webhook URL from settings: {webhook_url}")
+    
     if not webhook_url:
+        print("ERROR: Webhook URL not configured!")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Webhook URL not configured"
         )
     
     try:
+        print("Reading file content...")
         # Read file content
         file_content = await file.read()
+        print(f"File content read: {len(file_content)} bytes")
         
         print(f"=== Sending file to webhook ===")
         print(f"Webhook URL: {webhook_url}")
@@ -152,8 +170,8 @@ async def upload_file_to_webhook(
         
         # Encode file to base64
         import base64
+        print("Encoding file to base64...")
         file_base64 = base64.b64encode(file_content).decode('utf-8')
-        
         print(f"File encoded to base64: {len(file_base64)} characters")
         
         # Build JSON payload with base64 file
@@ -165,32 +183,41 @@ async def upload_file_to_webhook(
             'file': file_base64,
         }
         
-        print(f"Sending JSON with base64 file data...")
+        print(f"Building JSON payload...")
         print(f"JSON keys: {list(json_data.keys())}")
         print(f"JSON size: {len(str(json_data))} characters")
+        print(f"Base64 data length: {len(file_base64)} characters")
         
         # Send to webhook
-        response = requests.post(
-            webhook_url,
-            json=json_data,
-            headers={
-                'Content-Type': 'application/json',
-            },
-            timeout=60,
-            allow_redirects=True
-        )
+        print(f"Sending POST request to webhook: {webhook_url}")
+        try:
+            response = requests.post(
+                webhook_url,
+                json=json_data,
+                headers={
+                    'Content-Type': 'application/json',
+                },
+                timeout=60,
+                allow_redirects=True
+            )
+            print(f"Webhook request completed")
+        except Exception as req_err:
+            print(f"ERROR during webhook request: {req_err}")
+            raise
         
         print(f"Webhook response status: {response.status_code}")
         print(f"Webhook response headers: {dict(response.headers)}")
         response_text = response.text[:500] if response.text else 'No response'
-        print(f"Webhook response: {response_text}")
+        print(f"Webhook response (first 500 chars): {response_text}")
         
         # Update database
+        print("Updating database...")
         user = queries.notify_upload(db, tgid, fileName, mimeType, size)
+        print("Database updated successfully")
         
         # Always return success from our side (file was sent to webhook)
         # Even if webhook returns error, we consider it sent
-        return {
+        result = {
             "success": True,
             "message": "File sent to webhook",
             "fileName": fileName,
@@ -200,6 +227,8 @@ async def upload_file_to_webhook(
             "webhookResponse": response.text[:1000] if response.text else None,
             "analyses": user.analyses or {}
         }
+        print(f"Returning result: {result}")
+        return result
     except requests.exceptions.Timeout as e:
         print(f"Webhook timeout error: {e}")
         # Update database even on timeout (file was processed)
