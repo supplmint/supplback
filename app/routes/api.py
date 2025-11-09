@@ -140,36 +140,33 @@ async def notify_upload(
     }
 
 
-# Request model for analysis result
-class AnalysisResultRequest(BaseModel):
-    tgid: str
-    report: str
-    fileName: Optional[str] = None
-
-
 # POST /api/analyses/result - Receive analysis result from n8n (no auth required)
+# Accepts Form-Data (multipart/form-data) - лучше для многострочного текста
 @router.post("/analyses/result")
 async def receive_analysis_result(
-    request: AnalysisResultRequest,
+    tgid: str = Form(...),
+    report: str = Form(...),
+    fileName: Optional[str] = Form(None),
     db: Session = Depends(get_db)
 ):
     """Receive analysis report from n8n and save to database
     
-    Accepts JSON body:
-    {
-        "tgid": "123456789",
-        "report": "текст отчета...",
-        "fileName": "analiz.jpg" (optional)
-    }
+    Accepts Form-Data (multipart/form-data):
+    - tgid: Telegram user ID (required)
+    - report: Report text (required, can be multiline)
+    - fileName: File name (optional)
+    
+    This format is better for multiline text from n8n.
     """
     print(f"=== Receiving analysis result from n8n ===")
-    print(f"TGID: {request.tgid}")
-    print(f"Report length: {len(request.report)} characters")
-    print(f"FileName: {request.fileName}")
+    print(f"TGID: {tgid}")
+    print(f"Report length: {len(report)} characters")
+    print(f"FileName: {fileName}")
+    print(f"First 200 chars of report: {report[:200]}...")
     
     try:
         # Get or create user
-        user = queries.get_or_create_user(db, request.tgid)
+        user = queries.get_or_create_user(db, tgid)
         
         # Get current analyses
         current_analyses = user.analyses or {}
@@ -179,8 +176,8 @@ async def receive_analysis_result(
         reports = current_analyses.get("reports", [])
         
         new_report = {
-            "text": request.report,
-            "fileName": request.fileName or "unknown",
+            "text": report,
+            "fileName": fileName or "unknown",
             "createdAt": datetime.utcnow().isoformat(),
         }
         
@@ -195,13 +192,13 @@ async def receive_analysis_result(
         db.commit()
         db.refresh(user)
         
-        print(f"✅ Report saved successfully for user {request.tgid}")
+        print(f"✅ Report saved successfully for user {tgid}")
         
         return {
             "success": True,
             "message": "Report saved",
-            "tgid": request.tgid,
-            "reportLength": len(request.report)
+            "tgid": tgid,
+            "reportLength": len(report)
         }
     except Exception as e:
         print(f"❌ Error saving report: {e}")
