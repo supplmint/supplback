@@ -213,35 +213,42 @@ async def upload_file_to_webhook(
         print(f"Base64 data length: {len(file_base64)} characters")
         print(f"First 100 chars of base64: {file_base64[:100]}...")
         
-        # Send to n8n webhook - ALWAYS use POST with JSON body
-        # Even if webhook is configured for GET, we send POST with file data
+        # Send to n8n webhook
+        # IMPORTANT: n8n webhooks should be configured to accept POST, not GET
+        # GET requests cannot send file data (URL length limit)
         print(f"Sending POST request with JSON to n8n webhook: {webhook_url}")
         print(f"Payload contains: fileName, mimeType, size, tgid, file (base64)")
+        print(f"Total payload size: {len(str(json_data))} characters")
         
-        response = requests.post(
-            webhook_url,
-            json=json_data,
-            headers={
-                'Content-Type': 'application/json',
-            },
-            timeout=60,
-            allow_redirects=True
-        )
-        
-        print(f"✅ Request sent! Response status: {response.status_code}")
-        
-        # Even if status is 404 or error, we consider it sent (webhook received it)
-        if response.status_code == 404:
-            print(f"⚠️ Webhook returned 404 - but data was sent. Webhook might be configured incorrectly.")
-        elif response.status_code >= 400:
-            print(f"⚠️ Webhook returned {response.status_code} - but data was sent.")
-        else:
-            print(f"✅ Webhook accepted request successfully!")
-        
-        print(f"Webhook response status: {response.status_code}")
-        print(f"Webhook response headers: {dict(response.headers)}")
-        response_text = response.text[:500] if response.text else 'No response'
-        print(f"Webhook response (first 500 chars): {response_text}")
+        try:
+            response = requests.post(
+                webhook_url,
+                json=json_data,
+                headers={
+                    'Content-Type': 'application/json',
+                },
+                timeout=60,
+                allow_redirects=True
+            )
+            
+            print(f"✅ Request sent successfully! Response status: {response.status_code}")
+            print(f"Webhook response headers: {dict(response.headers)}")
+            response_text = response.text[:500] if response.text else 'No response'
+            print(f"Webhook response (first 500 chars): {response_text}")
+            
+            # Log response status
+            if response.status_code == 404:
+                print(f"⚠️ WARNING: Webhook returned 404. Check n8n webhook settings - it should accept POST requests.")
+            elif response.status_code >= 400:
+                print(f"⚠️ WARNING: Webhook returned {response.status_code}. Check n8n webhook configuration.")
+            else:
+                print(f"✅ SUCCESS: Webhook accepted request (status {response.status_code})")
+                
+        except Exception as send_err:
+            print(f"❌ ERROR sending to webhook: {send_err}")
+            print(traceback.format_exc())
+            # Don't fail - we tried to send
+            response = type('obj', (object,), {'status_code': 0, 'text': str(send_err)})()
         
         # Update database (try, but don't fail if it doesn't work)
         analyses = {}
