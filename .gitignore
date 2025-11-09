@@ -41,14 +41,11 @@ logs/
 *.tmp
 *.temp
 
-# Old TypeScript backend
-src/
-tsconfig.json
-package.json
-package-lock.json
-node_modules/
-.npmrc
-dist/
-
-# Frontend - uncomment to exclude
-# frontend/
+# Old TypeScript backend (removed, now using Python)
+# src/
+# tsconfig.json
+# package.json
+# package-lock.json
+# node_modules/
+# .npmrc
+# dist/
