@@ -13,6 +13,12 @@ def get_tgid_from_header(x_telegram_initdata: Optional[str] = Header(None)) -> s
             detail="Missing x-telegram-initdata header"
         )
     
+    if not settings.BOT_TOKEN:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="BOT_TOKEN is not configured"
+        )
+    
     # Verify signature
     if not verify_init_data(x_telegram_initdata, settings.BOT_TOKEN):
         raise HTTPException(

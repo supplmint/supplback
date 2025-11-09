@@ -2,23 +2,27 @@ services:
   - type: web
     name: health-app-backend
     runtime: python
-    buildCommand: pip install -r requirements.txt
+    buildCommand: pip install --upgrade pip && pip install -r requirements.txt
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: NODE_ENV
         value: production
-      - key: PORT
-        value: 3000
+      - key: PYTHON_VERSION
+        value: 3.11.0
       - key: BOT_TOKEN
         sync: false  # Установите вручную в панели Render
-      - key: PGHOST
-        sync: false  # Установите вручную в панели Render
-      - key: PGPORT
-        value: 5432
-      - key: PGDATABASE
-        sync: false  # Установите вручную в панели Render
-      - key: PGUSER
-        sync: false  # Установите вручную в панели Render
-      - key: PGPASSWORD
-        sync: false  # Установите вручную в панели Render
+      # Database - используйте либо DATABASE_URL (проще), либо отдельные параметры
+      - key: DATABASE_URL
+        sync: false  # Скопируйте connection string из Supabase (Settings > Database > Connection string)
+      # Альтернативный способ (если не используете DATABASE_URL):
+      # - key: PGHOST
+      #   sync: false
+      # - key: PGPORT
+      #   value: 5432
+      # - key: PGDATABASE
+      #   sync: false
+      # - key: PGUSER
+      #   sync: false
+      # - key: PGPASSWORD
+      #   sync: false
 

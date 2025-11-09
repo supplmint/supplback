@@ -4,18 +4,21 @@ from typing import Optional
 
 class Settings(BaseSettings):
     # Server
-    NODE_ENV: str = "production"
+    NODE_ENV: str = "development"
     PORT: int = 3000
     
     # Telegram
-    BOT_TOKEN: str
+    BOT_TOKEN: Optional[str] = None
     
-    # Database
-    PGHOST: str
+    # Database - можно использовать либо DATABASE_URL (проще), либо отдельные параметры
+    DATABASE_URL: Optional[str] = None  # Supabase connection string (предпочтительно)
+    
+    # Альтернативный способ - отдельные параметры (для обратной совместимости)
+    PGHOST: Optional[str] = None
     PGPORT: int = 5432
-    PGDATABASE: str
-    PGUSER: str
-    PGPASSWORD: str
+    PGDATABASE: Optional[str] = None
+    PGUSER: Optional[str] = None
+    PGPASSWORD: Optional[str] = None
     
     class Config:
         env_file = ".env"

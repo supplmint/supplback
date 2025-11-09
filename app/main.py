@@ -9,10 +9,16 @@ from app.routes import health, api
 
 app = FastAPI(title="Health App Backend")
 
-# CORS configuration
+# CORS configuration - allow all Firebase domains and localhost
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex=r"https://.*\.(web\.app|firebaseapp\.com)|http://localhost:5173",
+    allow_origins=[
+        "http://localhost:5173",
+        "http://localhost:3000",
+        "https://suppl-f09d8.web.app",
+        "https://suppl-f09d8.firebaseapp.com",
+    ],
+    allow_origin_regex=r"https://.*\.(web\.app|firebaseapp\.com|firebasestorage\.app)",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -25,7 +31,7 @@ app.include_router(api.router, prefix="/api")
 
 @app.get("/")
 async def root():
-    return {"message": "Health App Backend"}
+    return {"message": "Health App Backend", "status": "ok"}
 
 
 if __name__ == "__main__":
