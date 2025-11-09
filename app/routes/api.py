@@ -168,11 +168,11 @@ async def receive_analysis_result(
         # Get or create user
         user = queries.get_or_create_user(db, tgid)
         
-        # Get current analyses
+        # Get current analyses (preserve existing data like last_upload, upload_history)
         current_analyses = user.analyses or {}
         
         # Add report to analyses
-        # Structure: { "reports": [{"text": "...", "fileName": "...", "createdAt": "..."}] }
+        # Structure: { "reports": [{"text": "...", "fileName": "...", "createdAt": "..."}], "last_report": {...} }
         reports = current_analyses.get("reports", [])
         
         new_report = {
@@ -185,6 +185,9 @@ async def receive_analysis_result(
         current_analyses["reports"] = reports
         current_analyses["last_report"] = new_report  # Save last report for quick access
         
+        # Preserve existing upload data (last_upload, upload_history) if they exist
+        # Don't overwrite them
+        
         # Update database
         user.analyses = current_analyses
         user.updated_at = datetime.utcnow()
@@ -193,12 +196,16 @@ async def receive_analysis_result(
         db.refresh(user)
         
         print(f"✅ Report saved successfully for user {tgid}")
+        print(f"Current analyses keys: {list(current_analyses.keys())}")
+        print(f"Reports count: {len(reports)}")
+        print(f"Last report exists: {'last_report' in current_analyses}")
         
         return {
             "success": True,
             "message": "Report saved",
             "tgid": tgid,
-            "reportLength": len(report)
+            "reportLength": len(report),
+            "analysesKeys": list(current_analyses.keys())
         }
     except Exception as e:
         print(f"❌ Error saving report: {e}")
