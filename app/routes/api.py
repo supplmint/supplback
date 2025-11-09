@@ -161,113 +161,103 @@ async def upload_file_to_webhook(
             print(f"GET request failed (this is OK for POST-only endpoints): {check_err}")
         
         # Try different methods to send to webhook
+        # PRIORITY: JSON first (webhook seems to accept JSON based on response)
         response = None
         last_error = None
         successful_method = None
         
-        # Method 1: Multipart form-data with 'file' field
+        import base64
+        file_base64 = base64.b64encode(file_content).decode('utf-8')
+        
+        # Method 1: JSON with base64 file (PRIORITY - webhook accepts JSON)
         try:
-            print("Trying method 1: multipart/form-data with 'file' field...")
-            files = {
-                'file': (fileName, file_content, mimeType)
-            }
-            data = {
+            print("Trying method 1: JSON with base64 file...")
+            json_data = {
                 'fileName': fileName,
                 'mimeType': mimeType,
-                'size': str(size),
+                'mime': mimeType,  # Alternative field name
+                'size': size,
                 'tgid': tgid,
+                'file': file_base64,
+                'fileData': file_base64,  # Alternative field name
+                'data': file_base64,  # Another alternative
+                'content': file_base64,  # Another alternative
+                'image': file_base64 if 'image' in mimeType else None,  # For images
             }
+            # Remove None values
+            json_data = {k: v for k, v in json_data.items() if v is not None}
+            
             response = requests.post(
                 webhook_url,
-                files=files,
-                data=data,
+                json=json_data,
+                headers={
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                },
                 timeout=45,
                 allow_redirects=True
             )
-            print(f"Method 1 response: {response.status_code}")
-            if response.status_code != 404:
-                successful_method = "Method 1 (multipart with fields)"
-                print(f"✅ Success with {successful_method}")
-            else:
-                raise Exception(f"404 Not Found with method 1")
+            print(f"Method 1 (JSON) response: {response.status_code}")
+            print(f"Method 1 response preview: {response.text[:200] if response.text else 'No response'}")
+            if response.status_code < 500:  # Accept any response except server errors
+                successful_method = "Method 1 (JSON with base64)"
+                print(f"✅ Using {successful_method}")
+                # Check if file data is in response (meaning it was received)
+                if fileName.lower() in response.text.lower() or response.status_code in [200, 201, 202]:
+                    print(f"✅ File appears to be received by webhook")
         except Exception as e1:
             last_error = e1
             print(f"Method 1 failed: {e1}")
-            
-            # Method 2: Only file, no extra fields
+        
+        # Only try other methods if JSON failed or returned error
+        if response is None or response.status_code >= 500:
+            # Method 2: Multipart form-data with 'file' field
             try:
-                print("Trying method 2: only file, no extra fields...")
+                print("Trying method 2: multipart/form-data with 'file' field...")
                 files = {
-                    'file': (fileName, file_content, mimeType)
+                    'file': (fileName, file_content, mimeType),
+                    'upload': (fileName, file_content, mimeType),  # Alternative field name
+                }
+                data = {
+                    'fileName': fileName,
+                    'mimeType': mimeType,
+                    'size': str(size),
+                    'tgid': tgid,
                 }
                 response = requests.post(
                     webhook_url,
                     files=files,
+                    data=data,
                     timeout=45,
                     allow_redirects=True
                 )
-                print(f"Method 2 response: {response.status_code}")
-                if response.status_code != 404:
-                    successful_method = "Method 2 (multipart file only)"
-                    print(f"✅ Success with {successful_method}")
-                else:
-                    raise Exception(f"404 Not Found with method 2")
+                print(f"Method 2 (multipart) response: {response.status_code}")
+                if response.status_code < 500:
+                    successful_method = "Method 2 (multipart with fields)"
+                    print(f"✅ Using {successful_method}")
             except Exception as e2:
                 last_error = e2
                 print(f"Method 2 failed: {e2}")
                 
-                # Method 3: JSON with base64 encoded file
+                # Method 3: Only file in multipart
                 try:
-                    print("Trying method 3: JSON with base64 file...")
-                    import base64
-                    file_base64 = base64.b64encode(file_content).decode('utf-8')
-                    json_data = {
-                        'fileName': fileName,
-                        'mimeType': mimeType,
-                        'size': size,
-                        'tgid': tgid,
-                        'file': file_base64,
+                    print("Trying method 3: multipart file only...")
+                    files = {
+                        'file': (fileName, file_content, mimeType)
                     }
                     response = requests.post(
                         webhook_url,
-                        json=json_data,
-                        headers={'Content-Type': 'application/json'},
+                        files=files,
                         timeout=45,
                         allow_redirects=True
                     )
-                    print(f"Method 3 response: {response.status_code}")
-                    if response.status_code != 404:
-                        successful_method = "Method 3 (JSON with base64)"
-                        print(f"✅ Success with {successful_method}")
-                    else:
-                        raise Exception(f"404 Not Found with method 3")
+                    print(f"Method 3 (multipart file only) response: {response.status_code}")
+                    if response.status_code < 500:
+                        successful_method = "Method 3 (multipart file only)"
+                        print(f"✅ Using {successful_method}")
                 except Exception as e3:
                     last_error = e3
                     print(f"Method 3 failed: {e3}")
-                    
-                    # Method 4: Raw file data
-                    try:
-                        print("Trying method 4: raw file data...")
-                        response = requests.post(
-                            webhook_url,
-                            data=file_content,
-                            headers={
-                                'Content-Type': mimeType,
-                                'Content-Disposition': f'attachment; filename="{fileName}"',
-                                'X-File-Name': fileName,
-                                'X-File-Size': str(size),
-                                'X-TGID': tgid,
-                            },
-                            timeout=45,
-                            allow_redirects=True
-                        )
-                        print(f"Method 4 response: {response.status_code}")
-                        if response.status_code != 404:
-                            successful_method = "Method 4 (raw file data)"
-                            print(f"✅ Success with {successful_method}")
-                    except Exception as e4:
-                        last_error = e4
-                        print(f"Method 4 failed: {e4}")
         
         if response is None:
             raise HTTPException(
@@ -279,7 +269,19 @@ async def upload_file_to_webhook(
         print(f"Successful method: {successful_method}")
         print(f"Status: {response.status_code}")
         print(f"Headers: {dict(response.headers)}")
-        print(f"Response text (first 500 chars): {response.text[:500]}")
+        response_preview = response.text[:500] if response.text else "No response body"
+        print(f"Response text (first 500 chars): {response_preview}")
+        
+        # Check if file was actually received by webhook
+        # If response body contains file metadata or confirms receipt, it's good
+        response_lower = response_preview.lower()
+        file_received = (
+            fileName.lower() in response_lower or
+            'file' in response_lower or
+            'received' in response_lower or
+            'success' in response_lower or
+            response.status_code in [200, 201, 202]
+        )
         
         # If 404, it means endpoint doesn't exist
         if response.status_code == 404:
@@ -302,6 +304,10 @@ async def upload_file_to_webhook(
         # Update database
         user = queries.notify_upload(db, tgid, fileName, mimeType, size)
         
+        # Warn if file doesn't seem to be received
+        if not file_received and response.status_code >= 200 and response.status_code < 300:
+            print(f"⚠️ WARNING: Response doesn't indicate file was received. Response: {response_preview}")
+        
         # Return response
         return {
             "success": response.status_code < 400,  # Consider 2xx and 3xx as success
@@ -312,6 +318,7 @@ async def upload_file_to_webhook(
             "webhookResponse": response.text[:1000] if response.text else None,
             "webhookHeaders": dict(response.headers),
             "method": successful_method,
+            "fileReceived": file_received,
             "analyses": user.analyses or {}
         }
     except requests.exceptions.Timeout:
