@@ -50,5 +50,5 @@ node_modules/
 .npmrc
 dist/
 
-# Frontend (not included in this repo)
-frontend/
+# Frontend - uncomment to exclude
+# frontend/
