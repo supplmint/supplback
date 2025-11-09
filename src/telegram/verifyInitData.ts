@@ -28,7 +28,8 @@ export function verifyInitData(initData: string, botToken: string): boolean {
       .digest();
 
     // Build data_check_string: sort k=v pairs and join with \n
-    const dataCheckString = Array.from(params.entries())
+    const entries = Array.from(params.entries()) as [string, string][];
+    const dataCheckString = entries
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([key, value]) => `${key}=${value}`)
       .join("\n");

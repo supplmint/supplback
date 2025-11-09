@@ -38,7 +38,7 @@ app.use("/", healthRoutes);
 app.use("/api", apiRoutes);
 
 // 404 handler
-app.use((req, res) => {
+app.use((req: express.Request, res: express.Response) => {
   res.status(404).json({ error: "Not found" });
 });
 

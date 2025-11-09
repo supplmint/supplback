@@ -1,7 +1,11 @@
-import { Request } from "express";
+import { Request, Response, NextFunction } from "express";
 
 export interface AuthenticatedRequest extends Request {
   tgid?: string;
+  headers: Request["headers"] & {
+    "x-telegram-initdata"?: string;
+  };
+  body: any;
 }
 
 export interface HealthAppRecord {
