@@ -35,7 +35,10 @@ def verify_init_data(init_data: str, bot_token: str) -> bool:
         # Build data_check_string: sort k=v pairs and join with \n
         data_check_items = []
         for key in sorted(params.keys()):
-            value = params[key][0] if params[key] else ""
+            if params[key] and len(params[key]) > 0:
+                value = params[key][0]
+            else:
+                value = ""
             data_check_items.append(f"{key}={value}")
         
         data_check_string = "\n".join(data_check_items)
