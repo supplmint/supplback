@@ -2,7 +2,6 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 import os
-import re
 
 load_dotenv()
 
@@ -11,15 +10,6 @@ from app.routes import health, api
 app = FastAPI(title="Health App Backend")
 
 # CORS configuration
-# FastAPI doesn't support regex in allow_origins, so we'll use a function
-def is_allowed_origin(origin: str) -> bool:
-    allowed_patterns = [
-        r"^http://localhost:5173$",
-        r"^https://.*\.web\.app$",
-        r"^https://.*\.firebaseapp\.com$",
-    ]
-    return any(re.match(pattern, origin) for pattern in allowed_patterns)
-
 app.add_middleware(
     CORSMiddleware,
     allow_origin_regex=r"https://.*\.(web\.app|firebaseapp\.com)|http://localhost:5173",

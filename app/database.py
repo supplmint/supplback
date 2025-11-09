@@ -6,11 +6,10 @@ import os
 # Database URL
 DATABASE_URL = f"postgresql://{settings.PGUSER}:{settings.PGPASSWORD}@{settings.PGHOST}:{settings.PGPORT}/{settings.PGDATABASE}"
 
-# SSL configuration for production
-if settings.NODE_ENV == "production":
-    connect_args = {"sslmode": "require"}
-else:
-    connect_args = {}
+# SSL configuration for production (Supabase requires SSL)
+connect_args = {
+    "sslmode": "require"
+} if settings.NODE_ENV == "production" else {}
 
 engine = create_engine(DATABASE_URL, connect_args=connect_args)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
