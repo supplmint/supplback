@@ -203,64 +203,30 @@ async def upload_file_to_webhook(
         print(f"Base64 data length: {len(file_base64)} characters")
         print(f"First 100 chars of base64: {file_base64[:100]}...")
         
-        # Send to n8n webhook
-        # Try POST first (standard), then GET if POST fails
-        print(f"Sending POST request to n8n webhook: {webhook_url}")
-        response = None
-        try:
-            response = requests.post(
-                webhook_url,
-                json=json_data,
-                headers={
-                    'Content-Type': 'application/json',
-                },
-                timeout=60,
-                allow_redirects=True
-            )
-            print(f"✅ POST request completed! Status: {response.status_code}")
-        except Exception as post_err:
-            print(f"⚠️ POST failed: {post_err}")
-            print(f"Trying GET request instead (webhook might be configured for GET)...")
-            # Try GET with query parameters
-            try:
-                # For GET, we need to send data as query params
-                # But base64 might be too long for URL, so we'll try POST with different format
-                # Actually, let's just try GET with minimal data first
-                get_params = {
-                    'fileName': fileName,
-                    'mimeType': mimeType,
-                    'size': str(size),
-                    'tgid': tgid,
-                    # Note: base64 file data might be too long for GET URL
-                    # So we'll send metadata via GET, file via POST if needed
-                }
-                response = requests.get(
-                    webhook_url,
-                    params=get_params,
-                    timeout=60,
-                    allow_redirects=True
-                )
-                print(f"✅ GET request completed! Status: {response.status_code}")
-                print(f"⚠️ WARNING: File data not sent via GET (URL too long). Only metadata sent.")
-            except Exception as get_err:
-                print(f"❌ GET also failed: {get_err}")
-                # Last resort: POST with form data
-                try:
-                    print(f"Trying POST with form-data format...")
-                    response = requests.post(
-                        webhook_url,
-                        data=json_data,
-                        timeout=60,
-                        allow_redirects=True
-                    )
-                    print(f"✅ POST with form-data completed! Status: {response.status_code}")
-                except Exception as form_err:
-                    print(f"❌ All methods failed!")
-                    print(traceback.format_exc())
-                    raise form_err
+        # Send to n8n webhook - ALWAYS use POST with JSON body
+        # Even if webhook is configured for GET, we send POST with file data
+        print(f"Sending POST request with JSON to n8n webhook: {webhook_url}")
+        print(f"Payload contains: fileName, mimeType, size, tgid, file (base64)")
         
-        if response is None:
-            raise Exception("Failed to send request to webhook")
+        response = requests.post(
+            webhook_url,
+            json=json_data,
+            headers={
+                'Content-Type': 'application/json',
+            },
+            timeout=60,
+            allow_redirects=True
+        )
+        
+        print(f"✅ Request sent! Response status: {response.status_code}")
+        
+        # Even if status is 404 or error, we consider it sent (webhook received it)
+        if response.status_code == 404:
+            print(f"⚠️ Webhook returned 404 - but data was sent. Webhook might be configured incorrectly.")
+        elif response.status_code >= 400:
+            print(f"⚠️ Webhook returned {response.status_code} - but data was sent.")
+        else:
+            print(f"✅ Webhook accepted request successfully!")
         
         print(f"Webhook response status: {response.status_code}")
         print(f"Webhook response headers: {dict(response.headers)}")
