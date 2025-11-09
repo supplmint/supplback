@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, status, UploadFile, File, Form
 from sqlalchemy.orm import Session
 from typing import Dict, Any, Optional
 from pydantic import BaseModel
@@ -122,4 +122,82 @@ async def notify_upload(
         "size": request.size,
         "analyses": user.analyses or {}
     }
+
+
+# POST /api/upload-file - Upload file to webhook (proxy)
+@router.post("/upload-file")
+async def upload_file_to_webhook(
+    file: UploadFile = File(...),
+    fileName: str = Form(...),
+    mimeType: str = Form(...),
+    size: int = Form(...),
+    tgid: str = Depends(get_tgid_from_header),
+    db: Session = Depends(get_db)
+):
+    """Proxy file upload to webhook"""
+    webhook_url = settings.ANALYSIS_WEBHOOK_URL
+    if not webhook_url:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Webhook URL not configured"
+        )
+    
+    try:
+        # Read file content
+        file_content = await file.read()
+        
+        # Prepare multipart form data for webhook
+        files = {
+            'file': (fileName, file_content, mimeType)
+        }
+        data = {
+            'fileName': fileName,
+            'mimeType': mimeType,
+            'size': str(size),
+            'tgid': tgid,
+        }
+        
+        # Send to webhook
+        print(f"Sending file to webhook: {webhook_url}")
+        print(f"File: {fileName}, Size: {size}, Type: {mimeType}, TGID: {tgid}")
+        
+        response = requests.post(
+            webhook_url,
+            files=files,
+            data=data,
+            timeout=45
+        )
+        
+        print(f"Webhook response status: {response.status_code}")
+        print(f"Webhook response: {response.text[:200]}")
+        
+        # Update database
+        user = queries.notify_upload(db, tgid, fileName, mimeType, size)
+        
+        return {
+            "success": True,
+            "fileName": fileName,
+            "mime": mimeType,
+            "size": size,
+            "webhookStatus": response.status_code,
+            "webhookResponse": response.text[:500] if response.text else None,
+            "analyses": user.analyses or {}
+        }
+    except requests.exceptions.Timeout:
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail="Webhook timeout"
+        )
+    except requests.exceptions.RequestException as e:
+        print(f"Webhook request error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Webhook error: {str(e)}"
+        )
+    except Exception as e:
+        print(f"Upload error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Upload error: {str(e)}"
+        )
 
