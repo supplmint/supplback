@@ -2,7 +2,7 @@ services:
   - type: web
     name: health-app-backend
     runtime: node
-    buildCommand: NODE_ENV=development npm install && npm run build
+    buildCommand: npm install
     startCommand: npm start
     envVars:
       - key: NODE_ENV
