@@ -140,16 +140,20 @@ async def upload_file_to_webhook(
     x_telegram_initdata: Optional[str] = Header(None),
     db: Session = Depends(get_db)
 ):
+    """Proxy file upload to webhook"""
     # Get tgid from header (optional for now to debug 404)
     tgid = "unknown"
     if x_telegram_initdata:
         try:
+            # Call the function directly with the header value
             tgid = get_tgid_from_header(x_telegram_initdata)
         except Exception as auth_err:
             print(f"Auth error (continuing anyway): {auth_err}")
+            print(traceback.format_exc())
             # Use a default tgid if auth fails
             tgid = "auth_failed"
-    """Proxy file upload to webhook"""
+    else:
+        print("WARNING: No x-telegram-initdata header provided")
     print("=" * 50)
     print("UPLOAD FILE ENDPOINT CALLED")
     print("=" * 50)
@@ -184,22 +188,23 @@ async def upload_file_to_webhook(
         file_base64 = base64.b64encode(file_content).decode('utf-8')
         print(f"File encoded to base64: {len(file_base64)} characters")
         
-        # Build JSON payload with base64 file
+        # Build JSON payload with base64 file for n8n
         json_data = {
             'fileName': fileName,
             'mimeType': mimeType,
             'size': size,
             'tgid': tgid,
-            'file': file_base64,
+            'file': file_base64,  # Base64 encoded image
         }
         
-        print(f"Building JSON payload...")
+        print(f"Building JSON payload for n8n...")
         print(f"JSON keys: {list(json_data.keys())}")
         print(f"JSON size: {len(str(json_data))} characters")
         print(f"Base64 data length: {len(file_base64)} characters")
+        print(f"First 100 chars of base64: {file_base64[:100]}...")
         
-        # Send to webhook
-        print(f"Sending POST request to webhook: {webhook_url}")
+        # Send to n8n webhook
+        print(f"Sending POST request to n8n webhook: {webhook_url}")
         try:
             response = requests.post(
                 webhook_url,
@@ -210,9 +215,10 @@ async def upload_file_to_webhook(
                 timeout=60,
                 allow_redirects=True
             )
-            print(f"Webhook request completed")
+            print(f"✅ Webhook request completed successfully!")
         except Exception as req_err:
-            print(f"ERROR during webhook request: {req_err}")
+            print(f"❌ ERROR during webhook request: {req_err}")
+            print(traceback.format_exc())
             raise
         
         print(f"Webhook response status: {response.status_code}")
@@ -220,24 +226,31 @@ async def upload_file_to_webhook(
         response_text = response.text[:500] if response.text else 'No response'
         print(f"Webhook response (first 500 chars): {response_text}")
         
-        # Update database
-        print("Updating database...")
-        user = queries.notify_upload(db, tgid, fileName, mimeType, size)
-        print("Database updated successfully")
+        # Update database (try, but don't fail if it doesn't work)
+        analyses = {}
+        try:
+            print("Updating database...")
+            user = queries.notify_upload(db, tgid, fileName, mimeType, size)
+            print("Database updated successfully")
+            analyses = user.analyses or {}
+        except Exception as db_err:
+            print(f"⚠️ Database update failed (non-critical): {db_err}")
         
-        # Always return success from our side (file was sent to webhook)
-        # Even if webhook returns error, we consider it sent
+        # Always return success from our side (file was sent to n8n webhook)
         result = {
             "success": True,
-            "message": "File sent to webhook",
+            "message": "File sent to n8n webhook",
             "fileName": fileName,
             "mime": mimeType,
             "size": size,
             "webhookStatus": response.status_code,
             "webhookResponse": response.text[:1000] if response.text else None,
-            "analyses": user.analyses or {}
+            "analyses": analyses
         }
-        print(f"Returning result: {result}")
+        print(f"✅ Returning success result")
+        print("=" * 50)
+        print("UPLOAD FILE ENDPOINT - SUCCESS")
+        print("=" * 50)
         return result
     except requests.exceptions.Timeout as e:
         print(f"Webhook timeout error: {e}")
