@@ -80,10 +80,36 @@ async def get_me(
     db: Session = Depends(get_db)
 ):
     user = queries.get_or_create_user(db, tgid)
+    
+    # Явно обновляем данные из базы перед возвратом
+    db.refresh(user)
+    
+    # Логирование для отладки
+    print(f"[get_me] User {tgid} - analyses type: {type(user.analyses)}")
+    print(f"[get_me] User {tgid} - analyses value: {user.analyses}")
+    if user.analyses:
+        print(f"[get_me] User {tgid} - analyses keys: {list(user.analyses.keys()) if isinstance(user.analyses, dict) else 'not a dict'}")
+        if isinstance(user.analyses, dict) and "last_report" in user.analyses:
+            print(f"[get_me] User {tgid} - last_report: {user.analyses['last_report']}")
+            if isinstance(user.analyses["last_report"], dict):
+                print(f"[get_me] User {tgid} - last_report keys: {list(user.analyses['last_report'].keys())}")
+                print(f"[get_me] User {tgid} - last_report.text exists: {'text' in user.analyses['last_report']}")
+                if "text" in user.analyses["last_report"]:
+                    text_value = user.analyses["last_report"]["text"]
+                    print(f"[get_me] User {tgid} - last_report.text type: {type(text_value)}")
+                    print(f"[get_me] User {tgid} - last_report.text length: {len(text_value) if isinstance(text_value, str) else 'not a string'}")
+    
+    # Убеждаемся, что возвращаем правильный формат
+    analyses_data = user.analyses if user.analyses is not None else {}
+    # Если analyses это не dict, пытаемся преобразовать
+    if not isinstance(analyses_data, dict):
+        print(f"[get_me] WARNING: analyses is not a dict, type: {type(analyses_data)}, value: {analyses_data}")
+        analyses_data = {}
+    
     return {
         "tgid": user.tgid,
         "profile": user.profile or {},
-        "analyses": user.analyses or {}
+        "analyses": analyses_data
     }
 
 
@@ -323,6 +349,7 @@ async def receive_analysis_result(
         db.commit()
         db.refresh(user)
         
+        # Детальное логирование после сохранения
         print(f"✅ Report saved successfully for user {tgid_value}")
         print(f"Analyses now contains only reports (no upload data)")
         print(f"Reports count: {len(reports)}")
@@ -330,6 +357,30 @@ async def receive_analysis_result(
         print(f"✅ All analyses history saved to allanalize")
         print(f"All analyses count: {len(all_analyses_list)}")
         print(f"Allanalize type: {type(user.allanalize)}")
+        
+        # Проверяем, что данные правильно сохранились
+        print(f"[DEBUG] After commit and refresh:")
+        print(f"[DEBUG] user.analyses type: {type(user.analyses)}")
+        print(f"[DEBUG] user.analyses value: {user.analyses}")
+        if isinstance(user.analyses, dict):
+            print(f"[DEBUG] user.analyses keys: {list(user.analyses.keys())}")
+            if "last_report" in user.analyses:
+                print(f"[DEBUG] user.analyses['last_report']: {user.analyses['last_report']}")
+                if isinstance(user.analyses["last_report"], dict):
+                    print(f"[DEBUG] user.analyses['last_report'] keys: {list(user.analyses['last_report'].keys())}")
+                    if "text" in user.analyses["last_report"]:
+                        text_val = user.analyses["last_report"]["text"]
+                        print(f"[DEBUG] user.analyses['last_report']['text'] type: {type(text_val)}")
+                        print(f"[DEBUG] user.analyses['last_report']['text'] length: {len(text_val) if isinstance(text_val, str) else 'not a string'}")
+                        print(f"[DEBUG] user.analyses['last_report']['text'] first 200 chars: {text_val[:200] if isinstance(text_val, str) else 'not a string'}")
+                    else:
+                        print(f"[DEBUG] WARNING: 'text' key not found in last_report!")
+                else:
+                    print(f"[DEBUG] WARNING: last_report is not a dict, type: {type(user.analyses['last_report'])}")
+            else:
+                print(f"[DEBUG] WARNING: 'last_report' key not found in analyses!")
+        else:
+            print(f"[DEBUG] WARNING: user.analyses is not a dict, type: {type(user.analyses)}")
         
         return {
             "success": True,
