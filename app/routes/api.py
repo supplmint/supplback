@@ -316,6 +316,7 @@ async def receive_analysis_result(
         }
         
         # Add to allanalize - история всех анализов
+        # ВАЖНО: в allanalize сохраняем только отдельные отчеты, а не весь объект analyses
         current_allanalize = user.allanalize or {}
         all_analyses_list = []
         
@@ -332,8 +333,26 @@ async def receive_analysis_result(
                 # Если это просто объект, создаем новый список
                 all_analyses_list = []
         
-        # Добавляем новый анализ в историю
-        all_analyses_list.append(new_report)
+        # ВАЖНО: Добавляем только new_report (отдельный отчет), а не весь объект analyses
+        # Проверяем, что не добавляем дубликаты
+        # Если последний элемент уже такой же (по fileName и createdAt), не добавляем
+        if all_analyses_list:
+            last_item = all_analyses_list[-1]
+            if isinstance(last_item, dict):
+                # Если последний элемент - это весь объект analyses (старый формат), удаляем его
+                if "reports" in last_item and "last_report" in last_item:
+                    # Это старый формат - удаляем его
+                    all_analyses_list.pop()
+                # Если это уже такой же отчет, не добавляем дубликат
+                elif last_item.get("fileName") == new_report["fileName"] and last_item.get("createdAt") == new_report["createdAt"]:
+                    # Дубликат - не добавляем
+                    pass
+                else:
+                    all_analyses_list.append(new_report)
+            else:
+                all_analyses_list.append(new_report)
+        else:
+            all_analyses_list.append(new_report)
         
         # Сохраняем обновленную историю в allanalize
         user.allanalize = all_analyses_list
