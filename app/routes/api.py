@@ -288,8 +288,38 @@ async def receive_analysis_result(
             "reports": reports,
             "last_report": new_report  # Save last report for quick access
         }
+        
+        # Add to allanalize - история всех анализов
+        current_allanalize = user.allanalize or {}
+        all_analyses_list = []
+        
+        # Если allanalize - это список, используем его
+        if isinstance(current_allanalize, list):
+            all_analyses_list = current_allanalize.copy()
+        # Если allanalize - это объект с ключом "analyses" или "history"
+        elif isinstance(current_allanalize, dict):
+            if "analyses" in current_allanalize and isinstance(current_allanalize["analyses"], list):
+                all_analyses_list = current_allanalize["analyses"].copy()
+            elif "history" in current_allanalize and isinstance(current_allanalize["history"], list):
+                all_analyses_list = current_allanalize["history"].copy()
+            else:
+                # Если это просто объект, создаем новый список
+                all_analyses_list = []
+        
+        # Добавляем новый анализ в историю
+        all_analyses_list.append(new_report)
+        
+        # Сохраняем обновленную историю в allanalize
+        user.allanalize = all_analyses_list
+        
+        # Помечаем JSONB колонки как измененные
+        from sqlalchemy.orm.attributes import flag_modified
+        flag_modified(user, "analyses")
+        flag_modified(user, "allanalize")
+        
         user.updated_at = datetime.utcnow()
         
+        db.flush()
         db.commit()
         db.refresh(user)
         
@@ -297,6 +327,9 @@ async def receive_analysis_result(
         print(f"Analyses now contains only reports (no upload data)")
         print(f"Reports count: {len(reports)}")
         print(f"Last report exists: True")
+        print(f"✅ All analyses history saved to allanalize")
+        print(f"All analyses count: {len(all_analyses_list)}")
+        print(f"Allanalize type: {type(user.allanalize)}")
         
         return {
             "success": True,
