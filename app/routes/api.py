@@ -47,6 +47,32 @@ class NotifyUploadRequest(BaseModel):
     size: int
 
 
+# GET /api/analyses/history - Get all analyses history from allanalize column
+@router.get("/analyses/history")
+async def get_analyses_history(
+    tgid: str = Depends(get_tgid_from_header),
+    db: Session = Depends(get_db)
+):
+    """Get all analyses history from allanalize column"""
+    user = queries.get_or_create_user(db, tgid)
+    all_analyses = user.allanalize or {}
+    
+    # Return as list if it's a list, or wrap in object if it's a dict
+    if isinstance(all_analyses, list):
+        return {"analyses": all_analyses}
+    elif isinstance(all_analyses, dict):
+        # If it's a dict, try to extract list from common keys
+        if "analyses" in all_analyses:
+            return {"analyses": all_analyses["analyses"]}
+        elif "history" in all_analyses:
+            return {"analyses": all_analyses["history"]}
+        else:
+            # Convert dict to list of items
+            return {"analyses": [all_analyses] if all_analyses else []}
+    else:
+        return {"analyses": []}
+
+
 # GET /api/me - Get or create user
 @router.get("/me")
 async def get_me(

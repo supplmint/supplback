@@ -73,6 +73,7 @@ class HealthApp(Base):
     profile = Column(JSONB, default={}, nullable=False)
     analyses = Column(JSONB, default={}, nullable=False)
     recommendations = Column(JSONB, default={}, nullable=False)
+    allanalize = Column(JSONB, default={}, nullable=False)  # История всех анализов от ИИ
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 

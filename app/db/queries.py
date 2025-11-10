@@ -17,7 +17,8 @@ def get_or_create_user(db: Session, tgid: str) -> HealthApp:
             tgid=tgid,
             profile={},
             analyses={},
-            recommendations={}
+            recommendations={},
+            allanalize={}
         )
         db.add(user)
         db.commit()
