@@ -68,7 +68,27 @@ async def update_profile(
     tgid: str = Depends(get_tgid_from_header),
     db: Session = Depends(get_db)
 ):
+    # Log incoming profile data
+    print(f"=== UPDATE PROFILE REQUEST ===")
+    print(f"TGID: {tgid}")
+    print(f"Received profile data: {request.profile}")
+    print(f"Profile data type: {type(request.profile)}")
+    print(f"Profile keys: {list(request.profile.keys())}")
+    for key, value in request.profile.items():
+        print(f"  {key}: {value} (type: {type(value)})")
+    
+    # Update profile (this function already handles getting/creating user)
     user = queries.update_profile(db, tgid, request.profile)
+    
+    # Log updated profile
+    print(f"Profile after update: {user.profile}")
+    print(f"Profile type after update: {type(user.profile)}")
+    print(f"Profile keys after update: {list(user.profile.keys()) if user.profile else 'None'}")
+    if user.profile:
+        for key, value in user.profile.items():
+            print(f"  {key}: {value} (type: {type(value)})")
+    print(f"===============================")
+    
     return {
         "tgid": user.tgid,
         "profile": user.profile or {}

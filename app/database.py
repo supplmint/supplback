@@ -1,4 +1,5 @@
 from sqlalchemy import create_engine, Column, BigInteger, Text, JSON, DateTime, func
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import declarative_base, sessionmaker
 from app.config import settings
 import os
@@ -68,9 +69,10 @@ class HealthApp(Base):
     
     id = Column(BigInteger, primary_key=True, index=True)
     tgid = Column(Text, unique=True, nullable=False, index=True)
-    profile = Column(JSON, default={})
-    analyses = Column(JSON, default={})
-    recommendations = Column(JSON, default={})
+    # Используем JSONB для PostgreSQL (более эффективно, лучше отслеживает изменения)
+    profile = Column(JSONB, default={}, nullable=False)
+    analyses = Column(JSONB, default={}, nullable=False)
+    recommendations = Column(JSONB, default={}, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
