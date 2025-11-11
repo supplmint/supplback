@@ -203,12 +203,21 @@ async def get_recommendation(
     user = queries.get_or_create_user(db, tgid)
     rekom_data = user.rekom or {}
     
-    # Send analysis text to webhook
+    # Get user profile data
+    profile = user.profile or {}
+    
+    # Send analysis text to webhook with profile data
     try:
         webhook_payload = {
             "tgid": tgid,
             "analysis_text": request.analysis_text,
-            "analysis_id": analysis_id
+            "analysis_id": analysis_id,
+            "profile": {
+                "height": profile.get("height"),
+                "weight": profile.get("weight"),
+                "gender": profile.get("gender"),
+                "age": profile.get("age")
+            }
         }
         
         print(f"Sending analysis text to recommendations webhook: {webhook_url}")
