@@ -94,27 +94,85 @@ def update_profile(db: Session, tgid: str, profile: Dict[str, Any]) -> HealthApp
 
 
 def update_analyses(db: Session, tgid: str, analyses: Dict[str, Any]) -> HealthApp:
-    """Update analyses"""
+    """Update analyses and also update corresponding report in allanalize"""
     print(f"[update_analyses] Starting update for tgid: {tgid}")
     print(f"[update_analyses] Received analyses data keys: {list(analyses.keys()) if isinstance(analyses, dict) else 'not a dict'}")
     
     user = get_or_create_user(db, tgid)
     
-    # Get current analyses to compare
+    # Get current analyses
     current_analyses = user.analyses or {}
-    print(f"[update_analyses] Current analyses keys: {list(current_analyses.keys()) if isinstance(current_analyses, dict) else 'not a dict'}")
+    if not isinstance(current_analyses, dict):
+        current_analyses = {}
     
-    # Create a new dict to ensure SQLAlchemy detects the change
-    new_analyses = copy.deepcopy(analyses) if isinstance(analyses, dict) else analyses
+    print(f"[update_analyses] Current analyses keys: {list(current_analyses.keys())}")
     
-    # Log what we're about to save
-    if isinstance(new_analyses, dict) and "last_report" in new_analyses:
-        last_report = new_analyses["last_report"]
-        if isinstance(last_report, dict) and "text" in last_report:
-            text_length = len(last_report["text"]) if isinstance(last_report["text"], str) else 0
-            print(f"[update_analyses] New last_report.text length: {text_length}")
-            print(f"[update_analyses] New last_report.text first 200 chars: {last_report['text'][:200] if isinstance(last_report['text'], str) else 'not a string'}")
+    # Get the updated last_report if it exists
+    updated_last_report = None
+    if "last_report" in analyses and isinstance(analyses["last_report"], dict):
+        updated_last_report = analyses["last_report"]
+        print(f"[update_analyses] Found updated last_report with text length: {len(updated_last_report.get('text', '')) if isinstance(updated_last_report.get('text'), str) else 0}")
     
+    # Merge new data with current data to preserve structure
+    # Create a completely new dict object to ensure SQLAlchemy detects the change
+    updated_analyses = copy.deepcopy(current_analyses)
+    updated_analyses.update(analyses)
+    
+    # Ensure nested objects are also new dicts
+    if "last_report" in updated_analyses and isinstance(updated_analyses["last_report"], dict):
+        updated_analyses["last_report"] = dict(updated_analyses["last_report"])
+    if "reports" in updated_analyses and isinstance(updated_analyses["reports"], list):
+        updated_analyses["reports"] = [dict(r) if isinstance(r, dict) else r for r in updated_analyses["reports"]]
+    
+    # Update allanalize if we have an updated last_report
+    if updated_last_report:
+        current_allanalize = user.allanalize or {}
+        all_analyses_list = []
+        
+        # Handle different allanalize formats
+        if isinstance(current_allanalize, list):
+            all_analyses_list = current_allanalize.copy()
+        elif isinstance(current_allanalize, dict):
+            if "analyses" in current_allanalize and isinstance(current_allanalize["analyses"], list):
+                all_analyses_list = current_allanalize["analyses"].copy()
+            elif "history" in current_allanalize and isinstance(current_allanalize["history"], list):
+                all_analyses_list = current_allanalize["history"].copy()
+        
+        # Update the corresponding report in allanalize
+        if all_analyses_list and isinstance(updated_last_report, dict):
+            report_file_name = updated_last_report.get("fileName")
+            report_created_at = updated_last_report.get("createdAt")
+            report_text = updated_last_report.get("text")
+            
+            print(f"[update_analyses] Looking for report in allanalize: fileName={report_file_name}, createdAt={report_created_at}")
+            
+            # Find and update the matching report
+            updated_count = 0
+            for i, item in enumerate(all_analyses_list):
+                if isinstance(item, dict):
+                    # Match by fileName and createdAt
+                    if (report_file_name and report_created_at and
+                        item.get("fileName") == report_file_name and
+                        item.get("createdAt") == report_created_at):
+                        # Update this report
+                        all_analyses_list[i] = dict(updated_last_report)
+                        updated_count += 1
+                        print(f"[update_analyses] Updated report at index {i} in allanalize")
+                    # Or match by text if fileName/createdAt not available
+                    elif report_text and item.get("text") == current_analyses.get("last_report", {}).get("text"):
+                        all_analyses_list[i] = dict(updated_last_report)
+                        updated_count += 1
+                        print(f"[update_analyses] Updated report at index {i} in allanalize (matched by text)")
+            
+            if updated_count > 0:
+                print(f"[update_analyses] Updated {updated_count} report(s) in allanalize")
+                user.allanalize = all_analyses_list
+                flag_modified(user, "allanalize")
+            else:
+                print(f"[update_analyses] No matching report found in allanalize to update")
+    
+    # Create a completely new dict to ensure SQLAlchemy detects the change
+    new_analyses = dict(updated_analyses)
     user.analyses = new_analyses
     user.updated_at = datetime.utcnow()
     
@@ -134,6 +192,7 @@ def update_analyses(db: Session, tgid: str, analyses: Dict[str, Any]) -> HealthA
         if isinstance(saved_last_report, dict) and "text" in saved_last_report:
             saved_text_length = len(saved_last_report["text"]) if isinstance(saved_last_report["text"], str) else 0
             print(f"[update_analyses] Saved last_report.text length: {saved_text_length}")
+            print(f"[update_analyses] Saved last_report.text first 200 chars: {saved_last_report['text'][:200] if isinstance(saved_last_report['text'], str) else 'not a string'}")
     
     return user
 
