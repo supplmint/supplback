@@ -47,6 +47,10 @@ class NotifyUploadRequest(BaseModel):
     size: int
 
 
+class GetRecommendationRequest(BaseModel):
+    analysis_id: str
+
+
 # GET /api/analyses/history - Get all analyses history from allanalize column
 @router.get("/analyses/history")
 async def get_analyses_history(
@@ -171,6 +175,18 @@ async def update_recommendations(
     return {
         "recommendations": user.recommendations or {}
     }
+
+
+# GET /api/recommendations/{analysis_id} - Get recommendation for specific analysis
+@router.get("/recommendations/{analysis_id}")
+async def get_recommendation(
+    analysis_id: str,
+    tgid: str = Depends(get_tgid_from_header),
+    db: Session = Depends(get_db)
+):
+    """Get recommendation for specific analysis from rekom column or base.txt"""
+    result = queries.get_rekom_for_analysis(db, tgid, analysis_id)
+    return result
 
 
 # POST /api/notify-upload - Notify about file upload

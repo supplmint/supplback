@@ -13,14 +13,24 @@ pip-delete-this-directory.txt
 .pytest_cache/
 .coverage
 htmlcov/
+*.egg-info/
 dist/
 build/
-*.egg-info/
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+.npm
+.eslintcache
 
 # Environment variables
 .env
 .env.local
 .env.*.local
+.env.production
 
 # IDE
 .vscode/
@@ -28,30 +38,23 @@ build/
 *.swp
 *.swo
 *~
-
-# OS
 .DS_Store
-Thumbs.db
 
-# Logs
-*.log
-logs/
-
-# Temporary files
-*.tmp
-*.temp
-
-# Node modules
-node_modules/
-package-lock.json
-
-# Frontend (not in this repo)
-frontend/
+# Build outputs
+frontend/dist/
+dist/
+*.map
 
 # Firebase
 .firebase/
 firebase-debug.log
-firebase-debug.*.log
-firebase.json
-.firebaserc
-storage.rules
+firestore-debug.log
+ui-debug.log
+
+# Logs
+logs/
+*.log
+
+# OS
+Thumbs.db
+.DS_Store

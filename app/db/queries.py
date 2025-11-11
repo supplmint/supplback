@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import Dict, Any
 import copy
 import json
+import os
 
 
 def get_or_create_user(db: Session, tgid: str) -> HealthApp:
@@ -18,7 +19,8 @@ def get_or_create_user(db: Session, tgid: str) -> HealthApp:
             profile={},
             analyses={},
             recommendations={},
-            allanalize={}
+            allanalize={},
+            rekom={}
         )
         db.add(user)
         db.commit()
@@ -111,6 +113,62 @@ def update_recommendations(db: Session, tgid: str, recommendations: Dict[str, An
     db.commit()
     db.refresh(user)
     return user
+
+
+def get_rekom_for_analysis(db: Session, tgid: str, analysis_id: str) -> Dict[str, Any]:
+    """Get recommendation for specific analysis from rekom column or base.txt"""
+    user = get_or_create_user(db, tgid)
+    
+    # Check if recommendation exists in rekom column
+    rekom_data = user.rekom or {}
+    if isinstance(rekom_data, dict) and analysis_id in rekom_data:
+        return {
+            "analysis_id": analysis_id,
+            "recommendation": rekom_data[analysis_id]
+        }
+    
+    # If not found, load from base.txt
+    try:
+        # Try multiple possible paths for base.txt
+        possible_paths = [
+            os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "base.txt"),  # Root of project
+            os.path.join(os.path.dirname(__file__), "..", "..", "..", "base.txt"),  # Alternative relative path
+            "base.txt",  # Current directory
+        ]
+        
+        base_path = None
+        for path in possible_paths:
+            abs_path = os.path.abspath(path)
+            if os.path.exists(abs_path):
+                base_path = abs_path
+                break
+        
+        if base_path and os.path.exists(base_path):
+            with open(base_path, 'r', encoding='utf-8') as f:
+                base_content = f.read()
+            
+            # Save to rekom column for future use
+            if not isinstance(rekom_data, dict):
+                rekom_data = {}
+            rekom_data[analysis_id] = base_content
+            user.rekom = rekom_data
+            flag_modified(user, "rekom")
+            user.updated_at = datetime.utcnow()
+            db.commit()
+            db.refresh(user)
+            
+            return {
+                "analysis_id": analysis_id,
+                "recommendation": base_content
+            }
+    except Exception as e:
+        print(f"Error loading base.txt: {e}")
+    
+    # Return empty if nothing found
+    return {
+        "analysis_id": analysis_id,
+        "recommendation": ""
+    }
 
 
 def notify_upload(db: Session, tgid: str, file_name: str, mime: str, size: int) -> HealthApp:

@@ -1,0 +1,2 @@
+export { default as app, auth, storage } from './config';
+
