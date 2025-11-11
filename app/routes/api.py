@@ -1046,6 +1046,8 @@ async def upload_file_to_webhook(
 
     size: int = Form(...),
 
+    clientTime: Optional[str] = Form(None),
+
     x_telegram_initdata: Optional[str] = Header(None),
 
     db: Session = Depends(get_db)
@@ -1680,6 +1682,8 @@ async def upload_file_to_webhook(
     mimeType: str = Form(...),
 
     size: int = Form(...),
+
+    clientTime: Optional[str] = Form(None),
 
     x_telegram_initdata: Optional[str] = Header(None),
 
