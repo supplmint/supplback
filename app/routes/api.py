@@ -56,6 +56,12 @@ class GetRecommendationByTextRequest(BaseModel):
     analysis_id: Optional[str] = None
 
 
+class RecommendationResultRequest(BaseModel):
+    tgid: str
+    analysis_id: str
+    recommendation: str
+
+
 # GET /api/analyses/history - Get all analyses history from allanalize column
 @router.get("/analyses/history")
 async def get_analyses_history(
@@ -203,10 +209,18 @@ async def get_recommendation(
     user = queries.get_or_create_user(db, tgid)
     rekom_data = user.rekom or {}
     
+    # Check if recommendation already exists
+    if isinstance(rekom_data, dict) and analysis_id in rekom_data:
+        return {
+            "analysis_id": analysis_id,
+            "recommendation": rekom_data[analysis_id],
+            "cached": True
+        }
+    
     # Get user profile data
     profile = user.profile or {}
     
-    # Send analysis text to webhook with profile data
+    # Send analysis text to webhook with profile data (webhook will send result back via HTTP Request)
     try:
         webhook_payload = {
             "tgid": tgid,
@@ -222,58 +236,117 @@ async def get_recommendation(
         
         print(f"Sending analysis text to recommendations webhook: {webhook_url}")
         print(f"Analysis text length: {len(request.analysis_text)} characters")
+        print(f"Webhook will send result back via HTTP Request to /api/recommendations/result")
         
-        response = requests.post(
-            webhook_url,
-            json=webhook_payload,
-            headers={"Content-Type": "application/json"},
-            timeout=120  # 2 minutes timeout for AI processing
-        )
-        
-        if response.status_code == 200:
-            # Parse response - expect JSON with "recommendation" field
-            response_data = response.json()
-            recommendation = response_data.get("recommendation", response_data.get("text", ""))
-            
-            if recommendation:
-                # Save to database
-                if not isinstance(rekom_data, dict):
-                    rekom_data = {}
-                rekom_data[analysis_id] = recommendation
-                user.rekom = rekom_data
-                from sqlalchemy.orm.attributes import flag_modified
-                flag_modified(user, "rekom")
-                user.updated_at = datetime.utcnow()
-                db.commit()
-                db.refresh(user)
-                
-                return {
-                    "analysis_id": analysis_id,
-                    "recommendation": recommendation,
-                    "cached": False
-                }
-            else:
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail="Webhook returned empty recommendation"
-                )
-        else:
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail=f"Webhook returned error: {response.status_code} - {response.text[:200]}"
+        # Send to webhook (don't wait for response - webhook will send result via HTTP Request)
+        try:
+            requests.post(
+                webhook_url,
+                json=webhook_payload,
+                headers={"Content-Type": "application/json"},
+                timeout=10  # Short timeout just to send the request
             )
+        except Exception as e:
+            print(f"Warning: Could not send to webhook: {e}")
+            # Continue anyway - webhook might still process
+        
+        # Return status - recommendation will be available after webhook processes
+        return {
+            "analysis_id": analysis_id,
+            "status": "processing",
+            "message": "Analysis sent to AI for processing. Recommendation will be available shortly."
+        }
             
-    except requests.exceptions.Timeout:
+    except Exception as e:
+        print(f"Error sending to webhook: {e}")
         raise HTTPException(
-            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
-            detail="Webhook timeout - AI processing took too long"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error sending to webhook: {str(e)}"
         )
-    except requests.exceptions.RequestException as e:
-        print(f"Webhook error: {e}")
+
+
+# POST /api/recommendations/result - Receive recommendation result from webhook (no auth required)
+@router.post("/recommendations/result")
+async def receive_recommendation_result(
+    request: RecommendationResultRequest,
+    db: Session = Depends(get_db)
+):
+    """Receive recommendation result from webhook and save to database
+    
+    This endpoint is called by n8n webhook via HTTP Request to send back
+    the AI-generated recommendation.
+    
+    Expected JSON body:
+    {
+        "tgid": "747737181",
+        "analysis_id": "analysis_123",
+        "recommendation": "текст рекомендации..."
+    }
+    """
+    print(f"=== Receiving recommendation result from webhook ===")
+    print(f"TGID: {request.tgid}")
+    print(f"Analysis ID: {request.analysis_id}")
+    print(f"Recommendation length: {len(request.recommendation)} characters")
+    
+    try:
+        # Get or create user
+        user = queries.get_or_create_user(db, request.tgid)
+        rekom_data = user.rekom or {}
+        
+        # Save recommendation to database
+        if not isinstance(rekom_data, dict):
+            rekom_data = {}
+        rekom_data[request.analysis_id] = request.recommendation
+        user.rekom = rekom_data
+        from sqlalchemy.orm.attributes import flag_modified
+        flag_modified(user, "rekom")
+        user.updated_at = datetime.utcnow()
+        
+        db.commit()
+        db.refresh(user)
+        
+        print(f"✅ Recommendation saved successfully for user {request.tgid}")
+        print(f"Analysis ID: {request.analysis_id}")
+        
+        return {
+            "success": True,
+            "message": "Recommendation saved",
+            "tgid": request.tgid,
+            "analysis_id": request.analysis_id,
+            "recommendation_length": len(request.recommendation)
+        }
+    except Exception as e:
+        print(f"❌ Error saving recommendation: {e}")
+        print(traceback.format_exc())
         raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Webhook error: {str(e)}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error saving recommendation: {str(e)}"
         )
+
+
+# GET /api/recommendations/{analysis_id} - Get recommendation by analysis_id
+@router.get("/recommendations/{analysis_id}")
+async def get_recommendation_by_id(
+    analysis_id: str,
+    tgid: str = Depends(get_tgid_from_header),
+    db: Session = Depends(get_db)
+):
+    """Get recommendation by analysis_id (for polling)"""
+    user = queries.get_or_create_user(db, tgid)
+    rekom_data = user.rekom or {}
+    
+    if isinstance(rekom_data, dict) and analysis_id in rekom_data:
+        return {
+            "analysis_id": analysis_id,
+            "recommendation": rekom_data[analysis_id],
+            "status": "ready"
+        }
+    
+    return {
+        "analysis_id": analysis_id,
+        "status": "processing",
+        "message": "Recommendation is being processed"
+    }
 
 
 # POST /api/notify-upload - Notify about file upload
