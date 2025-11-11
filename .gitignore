@@ -41,7 +41,7 @@ yarn-error.log*
 .DS_Store
 
 # Build outputs
-frontend/dist/
+frontend/
 dist/
 *.map
 
