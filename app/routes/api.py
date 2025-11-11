@@ -611,6 +611,8 @@ class AnalysisResultRequest(BaseModel):
 
     fileName: Optional[str] = None
 
+    clientTime: Optional[str] = None  # Client's local time (ISO format with timezone)
+
 
 
 
@@ -632,6 +634,8 @@ async def receive_analysis_result(
     report: Optional[str] = Form(None),
 
     fileName: Optional[str] = Form(None),
+
+    clientTime: Optional[str] = Form(None),
 
     db: Session = Depends(get_db)
 
@@ -725,6 +729,8 @@ async def receive_analysis_result(
 
                     fileName_value = json_data.get("fileName")
 
+                    client_time_value = json_data.get("clientTime")
+
                     print("Received as nested JSON from raw request")
 
         except Exception as e:
@@ -773,6 +779,15 @@ async def receive_analysis_result(
 
         
         
+        # Use client's local time if provided, otherwise use UTC server time
+        # client_time_value comes from the webhook (n8n should return it back)
+        created_at = client_time_value if client_time_value else datetime.utcnow().isoformat()
+        
+        if client_time_value:
+            print(f"Using client's local time: {client_time_value}")
+        else:
+            print(f"Using UTC server time (clientTime not provided): {created_at}")
+        
         # Create new report
 
         new_report = {
@@ -781,7 +796,7 @@ async def receive_analysis_result(
 
             "fileName": fileName_value or "unknown",
 
-            "createdAt": datetime.utcnow().isoformat(),
+            "createdAt": created_at,
 
         }
 
