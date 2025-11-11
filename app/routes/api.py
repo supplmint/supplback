@@ -439,6 +439,89 @@ async def get_recommendation(
         )
 
 
+# POST /api/recommendations/result - Receive recommendation result from webhook (no auth required)
+@router.post("/recommendations/result")
+async def receive_recommendation_result(
+    request: RecommendationResultRequest,
+    db: Session = Depends(get_db)
+):
+    """Receive recommendation result from webhook and save to rekom column
+    
+    This endpoint is called by n8n webhook via HTTP Request to send back
+    the AI-generated recommendation.
+    
+    Expected JSON body:
+    {
+        "tgid": "747737181",
+        "analysis_id": "analysis_123",
+        "recommendation": "текст рекомендации..."
+    }
+    """
+    print(f"=== Receiving recommendation result from webhook ===")
+    print(f"TGID: {request.tgid}")
+    print(f"Analysis ID: {request.analysis_id}")
+    print(f"Recommendation length: {len(request.recommendation)} characters")
+    
+    try:
+        # Get or create user
+        user = queries.get_or_create_user(db, request.tgid)
+        rekom_data = user.rekom or {}
+        
+        # Save recommendation to rekom column
+        if not isinstance(rekom_data, dict):
+            rekom_data = {}
+        rekom_data[request.analysis_id] = request.recommendation
+        user.rekom = rekom_data
+        from sqlalchemy.orm.attributes import flag_modified
+        flag_modified(user, "rekom")
+        user.updated_at = datetime.utcnow()
+        
+        db.commit()
+        db.refresh(user)
+        
+        print(f"✅ Recommendation saved to rekom for user {request.tgid}")
+        print(f"Analysis ID: {request.analysis_id}")
+        
+        return {
+            "success": True,
+            "message": "Recommendation saved to rekom",
+            "tgid": request.tgid,
+            "analysis_id": request.analysis_id,
+            "recommendation_length": len(request.recommendation)
+        }
+    except Exception as e:
+        print(f"❌ Error saving recommendation: {e}")
+        print(traceback.format_exc())
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error saving recommendation: {str(e)}"
+        )
+
+
+# GET /api/recommendations/{analysis_id} - Get recommendation from rekom by analysis_id
+@router.get("/recommendations/{analysis_id}")
+async def get_recommendation_by_id(
+    analysis_id: str,
+    tgid: str = Depends(get_tgid_from_header),
+    db: Session = Depends(get_db)
+):
+    """Get recommendation from rekom by analysis_id"""
+    user = queries.get_or_create_user(db, tgid)
+    rekom_data = user.rekom or {}
+    
+    if isinstance(rekom_data, dict) and analysis_id in rekom_data:
+        return {
+            "analysis_id": analysis_id,
+            "recommendation": rekom_data[analysis_id],
+            "status": "ready"
+        }
+    
+    return {
+        "analysis_id": analysis_id,
+        "status": "processing",
+        "message": "Recommendation is being processed"
+    }
+
 
 # POST /api/notify-upload - Notify about file upload
 
