@@ -13,6 +13,9 @@ class Settings(BaseSettings):
     # Webhook for file uploads
     ANALYSIS_WEBHOOK_URL: Optional[str] = "https://famimeprapud.beget.app/webhook-test/41cdfd57-0fc7-4e35-ba23-ffe0734fe412"
     
+    # Webhook for recommendations (AI processing)
+    RECOMMENDATIONS_WEBHOOK_URL: Optional[str] = None
+    
     # Database - можно использовать либо DATABASE_URL (проще), либо отдельные параметры
     DATABASE_URL: Optional[str] = None  # Supabase connection string (предпочтительно)
     

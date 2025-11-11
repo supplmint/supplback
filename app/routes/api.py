@@ -51,6 +51,11 @@ class GetRecommendationRequest(BaseModel):
     analysis_id: str
 
 
+class GetRecommendationByTextRequest(BaseModel):
+    analysis_text: str
+    analysis_id: Optional[str] = None
+
+
 # GET /api/analyses/history - Get all analyses history from allanalize column
 @router.get("/analyses/history")
 async def get_analyses_history(
@@ -177,16 +182,97 @@ async def update_recommendations(
     }
 
 
-# GET /api/recommendations/{analysis_id} - Get recommendation for specific analysis
-@router.get("/recommendations/{analysis_id}")
+# POST /api/recommendations/get - Get recommendation by sending analysis text to webhook
+@router.post("/recommendations/get")
 async def get_recommendation(
-    analysis_id: str,
+    request: GetRecommendationByTextRequest,
     tgid: str = Depends(get_tgid_from_header),
     db: Session = Depends(get_db)
 ):
-    """Get recommendation for specific analysis from rekom column or base.txt"""
-    result = queries.get_rekom_for_analysis(db, tgid, analysis_id)
-    return result
+    """Get recommendation by sending analysis text to AI webhook"""
+    webhook_url = settings.RECOMMENDATIONS_WEBHOOK_URL
+    
+    if not webhook_url:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Recommendations webhook URL not configured"
+        )
+    
+    # Check if recommendation already exists in database
+    analysis_id = request.analysis_id or f"analysis_{tgid}_{int(datetime.utcnow().timestamp())}"
+    user = queries.get_or_create_user(db, tgid)
+    rekom_data = user.rekom or {}
+    
+    if isinstance(rekom_data, dict) and analysis_id in rekom_data:
+        # Return cached recommendation
+        return {
+            "analysis_id": analysis_id,
+            "recommendation": rekom_data[analysis_id],
+            "cached": True
+        }
+    
+    # Send analysis text to webhook
+    try:
+        webhook_payload = {
+            "tgid": tgid,
+            "analysis_text": request.analysis_text,
+            "analysis_id": analysis_id
+        }
+        
+        print(f"Sending analysis text to recommendations webhook: {webhook_url}")
+        print(f"Analysis text length: {len(request.analysis_text)} characters")
+        
+        response = requests.post(
+            webhook_url,
+            json=webhook_payload,
+            headers={"Content-Type": "application/json"},
+            timeout=120  # 2 minutes timeout for AI processing
+        )
+        
+        if response.status_code == 200:
+            # Parse response - expect JSON with "recommendation" field
+            response_data = response.json()
+            recommendation = response_data.get("recommendation", response_data.get("text", ""))
+            
+            if recommendation:
+                # Save to database
+                if not isinstance(rekom_data, dict):
+                    rekom_data = {}
+                rekom_data[analysis_id] = recommendation
+                user.rekom = rekom_data
+                from sqlalchemy.orm.attributes import flag_modified
+                flag_modified(user, "rekom")
+                user.updated_at = datetime.utcnow()
+                db.commit()
+                db.refresh(user)
+                
+                return {
+                    "analysis_id": analysis_id,
+                    "recommendation": recommendation,
+                    "cached": False
+                }
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Webhook returned empty recommendation"
+                )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"Webhook returned error: {response.status_code} - {response.text[:200]}"
+            )
+            
+    except requests.exceptions.Timeout:
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail="Webhook timeout - AI processing took too long"
+        )
+    except requests.exceptions.RequestException as e:
+        print(f"Webhook error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Webhook error: {str(e)}"
+        )
 
 
 # POST /api/notify-upload - Notify about file upload
