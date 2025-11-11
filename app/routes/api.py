@@ -1196,6 +1196,8 @@ async def upload_file_to_webhook(
 
             'profile': profile_data,  # User profile data from database
 
+            'clientTime': clientTime,  # Client's local time (ISO format with timezone)
+
         }
 
         
@@ -1832,6 +1834,8 @@ async def upload_file_to_webhook(
             'file': file_base64,  # Base64 encoded image
 
             'profile': profile_data,  # User profile data from database
+
+            'clientTime': clientTime,  # Client's local time (ISO format with timezone)
 
         }
 
