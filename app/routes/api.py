@@ -669,6 +669,8 @@ async def receive_analysis_result(
 
     fileName_value = None
 
+    client_time_value = None
+
     
     
     # Try to get data from JSON first (Pydantic model)
@@ -680,6 +682,8 @@ async def receive_analysis_result(
         report_value = request_data.report
 
         fileName_value = request_data.fileName
+
+        client_time_value = request_data.clientTime
 
         print("Received as JSON (Pydantic model)")
 
