@@ -96,9 +96,16 @@ def update_profile(db: Session, tgid: str, profile: Dict[str, Any]) -> HealthApp
 def update_analyses(db: Session, tgid: str, analyses: Dict[str, Any]) -> HealthApp:
     """Update analyses"""
     user = get_or_create_user(db, tgid)
-    user.analyses = analyses
+    
+    # Create a new dict to ensure SQLAlchemy detects the change
+    new_analyses = copy.deepcopy(analyses) if isinstance(analyses, dict) else analyses
+    user.analyses = new_analyses
     user.updated_at = datetime.utcnow()
     
+    # Explicitly mark the JSONB column as modified
+    flag_modified(user, "analyses")
+    
+    db.flush()
     db.commit()
     db.refresh(user)
     return user
