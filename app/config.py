@@ -1,4 +1,5 @@
 from pydantic_settings import BaseSettings
+from pydantic import Field
 from typing import Optional
 
 
@@ -10,8 +11,8 @@ class Settings(BaseSettings):
     # Telegram
     BOT_TOKEN: Optional[str] = None
     
-    # Webhook for file uploads
-    ANALYSIS_WEBHOOK_URL: Optional[str] = "https://famimeprapud.beget.app/webhook-test/41cdfd57-0fc7-4e35-ba23-ffe0734fe412"
+    # Webhook for file uploads (from WEBHOOK_URL environment variable)
+    ANALYSIS_WEBHOOK_URL: Optional[str] = Field(default=None, env="WEBHOOK_URL")
     
     # Webhook for recommendations (AI processing)
     RECOMMENDATIONS_WEBHOOK_URL: Optional[str] = None
@@ -32,4 +33,3 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
-
