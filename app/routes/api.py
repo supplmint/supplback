@@ -693,6 +693,8 @@ async def receive_analysis_result(
 
         fileName_value = fileName
 
+        client_time_value = clientTime  # Get from Form if available
+
         print("Received as Form-Data")
 
     # Try to parse raw request body (for nested JSON from n8n)
