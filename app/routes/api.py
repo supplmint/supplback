@@ -198,18 +198,10 @@ async def get_recommendation(
             detail="Recommendations webhook URL not configured"
         )
     
-    # Check if recommendation already exists in database
+    # Always send analysis text to webhook (no cache check)
     analysis_id = request.analysis_id or f"analysis_{tgid}_{int(datetime.utcnow().timestamp())}"
     user = queries.get_or_create_user(db, tgid)
     rekom_data = user.rekom or {}
-    
-    if isinstance(rekom_data, dict) and analysis_id in rekom_data:
-        # Return cached recommendation
-        return {
-            "analysis_id": analysis_id,
-            "recommendation": rekom_data[analysis_id],
-            "cached": True
-        }
     
     # Send analysis text to webhook
     try:
