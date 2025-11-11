@@ -95,10 +95,26 @@ def update_profile(db: Session, tgid: str, profile: Dict[str, Any]) -> HealthApp
 
 def update_analyses(db: Session, tgid: str, analyses: Dict[str, Any]) -> HealthApp:
     """Update analyses"""
+    print(f"[update_analyses] Starting update for tgid: {tgid}")
+    print(f"[update_analyses] Received analyses data keys: {list(analyses.keys()) if isinstance(analyses, dict) else 'not a dict'}")
+    
     user = get_or_create_user(db, tgid)
+    
+    # Get current analyses to compare
+    current_analyses = user.analyses or {}
+    print(f"[update_analyses] Current analyses keys: {list(current_analyses.keys()) if isinstance(current_analyses, dict) else 'not a dict'}")
     
     # Create a new dict to ensure SQLAlchemy detects the change
     new_analyses = copy.deepcopy(analyses) if isinstance(analyses, dict) else analyses
+    
+    # Log what we're about to save
+    if isinstance(new_analyses, dict) and "last_report" in new_analyses:
+        last_report = new_analyses["last_report"]
+        if isinstance(last_report, dict) and "text" in last_report:
+            text_length = len(last_report["text"]) if isinstance(last_report["text"], str) else 0
+            print(f"[update_analyses] New last_report.text length: {text_length}")
+            print(f"[update_analyses] New last_report.text first 200 chars: {last_report['text'][:200] if isinstance(last_report['text'], str) else 'not a string'}")
+    
     user.analyses = new_analyses
     user.updated_at = datetime.utcnow()
     
@@ -106,8 +122,19 @@ def update_analyses(db: Session, tgid: str, analyses: Dict[str, Any]) -> HealthA
     flag_modified(user, "analyses")
     
     db.flush()
+    print(f"[update_analyses] After flush, user.analyses keys: {list(user.analyses.keys()) if isinstance(user.analyses, dict) else 'not a dict'}")
+    
     db.commit()
     db.refresh(user)
+    
+    # Verify what was saved
+    print(f"[update_analyses] After commit, user.analyses keys: {list(user.analyses.keys()) if isinstance(user.analyses, dict) else 'not a dict'}")
+    if isinstance(user.analyses, dict) and "last_report" in user.analyses:
+        saved_last_report = user.analyses["last_report"]
+        if isinstance(saved_last_report, dict) and "text" in saved_last_report:
+            saved_text_length = len(saved_last_report["text"]) if isinstance(saved_last_report["text"], str) else 0
+            print(f"[update_analyses] Saved last_report.text length: {saved_text_length}")
+    
     return user
 
 
