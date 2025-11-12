@@ -7,4 +7,5 @@ pydantic-settings
 python-dotenv
 python-multipart
 requests
+PyPDF2
 
