@@ -164,6 +164,31 @@ async def get_analyses_history(
         return {"analyses": []}
 
 
+# GET /api/opros/history - Get questionnaires history from opros_anemia column
+
+@router.get("/opros/history")
+
+async def get_opros_history(
+
+    tgid: str = Depends(get_tgid_from_header),
+
+    db: Session = Depends(get_db)
+
+):
+
+    """Get questionnaires history from opros_anemia column"""
+
+    user = queries.get_or_create_user(db, tgid)
+
+    opros_data = user.opros_anemia or {}
+
+    
+
+    # Return the opros_anemia data
+
+    return {"opros": opros_data}
+
+
 
 
 
