@@ -81,6 +81,10 @@ class UpdateRecommendationsRequest(BaseModel):
     recommendations: Dict[str, Any]
 
 
+class UpdateOprosAnemiaRequest(BaseModel):
+    opros_anemia: Dict[str, Any]
+
+
 
 
 
@@ -360,6 +364,27 @@ async def update_recommendations(
     }
 
 
+# POST /api/opros/anemia - Update iron deficiency questionnaire
+
+@router.post("/opros/anemia")
+
+async def update_opros_anemia(
+
+    request: UpdateOprosAnemiaRequest,
+
+    tgid: str = Depends(get_tgid_from_header),
+
+    db: Session = Depends(get_db)
+
+):
+
+    user = queries.update_opros_anemia(db, tgid, request.opros_anemia)
+
+    return {
+
+        "opros_anemia": user.opros_anemia or {}
+
+    }
 
 
 # POST /api/recommendations/get - Get recommendation by sending analysis text to webhook
@@ -1134,164 +1159,12 @@ async def upload_file_to_webhook(
 
     
     
-    if not webhook_url:
-
-        print("ERROR: Webhook URL not configured!")
-
-        raise HTTPException(
-
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-
-            detail="Webhook URL not configured"
-
-        )
-    
+    # If webhook is not configured, we'll just save to database and return success
     
 
     try:
 
-        print("Reading file content...")
-
-        # Read file content
-
-        file_content = await file.read()
-
-        print(f"File content read: {len(file_content)} bytes")
-
-        
-        
-        print(f"=== Sending file to webhook ===")
-
-        print(f"Webhook URL: {webhook_url}")
-
-        print(f"File: {fileName}, Size: {size} bytes, Type: {mimeType}, TGID: {tgid}")
-
-        
-        
-        # Encode file to base64
-
-        import base64
-
-        print("Encoding file to base64...")
-
-        file_base64 = base64.b64encode(file_content).decode('utf-8')
-
-        print(f"File encoded to base64: {len(file_base64)} characters")
-
-        
-        
-        # Build JSON payload with base64 file and profile data for n8n
-
-        json_data = {
-
-            'fileName': fileName,
-
-            'mimeType': mimeType,
-
-            'size': size,
-
-            'tgid': tgid,
-
-            'file': file_base64,  # Base64 encoded image
-
-            'profile': profile_data,  # User profile data from database
-
-            'clientTime': clientTime,  # Client's local time (ISO format with timezone)
-
-        }
-
-        
-        
-        print(f"Building JSON payload for n8n...")
-
-        print(f"JSON keys: {list(json_data.keys())}")
-
-        print(f"JSON size: {len(str(json_data))} characters")
-
-        print(f"Base64 data length: {len(file_base64)} characters")
-
-        print(f"Profile data keys: {list(profile_data.keys()) if profile_data else 'none'}")
-
-        print(f"First 100 chars of base64: {file_base64[:100]}...")
-
-        
-        
-        # Send to n8n webhook
-
-        # IMPORTANT: n8n webhooks should be configured to accept POST, not GET
-
-        # GET requests cannot send file data (URL length limit)
-
-        print(f"Sending POST request with JSON to n8n webhook: {webhook_url}")
-
-        print(f"Payload contains: fileName, mimeType, size, tgid, file (base64), profile")
-
-        print(f"Total payload size: {len(str(json_data))} characters")
-
-        
-        
-        try:
-
-            response = requests.post(
-
-                webhook_url,
-
-                json=json_data,
-
-                headers={
-
-                    'Content-Type': 'application/json',
-
-                },
-
-                timeout=60,
-
-                allow_redirects=True
-
-            )
-
-            
-            
-            print(f"✅ Request sent successfully! Response status: {response.status_code}")
-
-            print(f"Webhook response headers: {dict(response.headers)}")
-
-            response_text = response.text[:500] if response.text else 'No response'
-
-            print(f"Webhook response (first 500 chars): {response_text}")
-
-            
-            
-            # Log response status
-
-            if response.status_code == 404:
-
-                print(f"⚠️ WARNING: Webhook returned 404. Check n8n webhook settings - it should accept POST requests.")
-
-            elif response.status_code >= 400:
-
-                print(f"⚠️ WARNING: Webhook returned {response.status_code}. Check n8n webhook configuration.")
-
-            else:
-
-                print(f"✅ SUCCESS: Webhook accepted request (status {response.status_code})")
-                
-                
-
-        except Exception as send_err:
-
-            print(f"❌ ERROR sending to webhook: {send_err}")
-
-            print(traceback.format_exc())
-
-            # Don't fail - we tried to send
-
-            response = type('obj', (object,), {'status_code': 0, 'text': str(send_err)})()
-        
-        
-
-        # Update database (try, but don't fail if it doesn't work)
-
+        # Update database first (always do this)
         analyses = {}
 
         try:
@@ -1307,16 +1180,167 @@ async def upload_file_to_webhook(
         except Exception as db_err:
 
             print(f"⚠️ Database update failed (non-critical): {db_err}")
+
+        
+        # Send to webhook only if configured
+        response = None
+        
+        if webhook_url:
+
+            print("Reading file content...")
+
+            # Read file content
+
+            file_content = await file.read()
+
+            print(f"File content read: {len(file_content)} bytes")
+
+            
+            
+            print(f"=== Sending file to webhook ===")
+
+            print(f"Webhook URL: {webhook_url}")
+
+            print(f"File: {fileName}, Size: {size} bytes, Type: {mimeType}, TGID: {tgid}")
+
+            
+            
+            # Encode file to base64
+
+            import base64
+
+            print("Encoding file to base64...")
+
+            file_base64 = base64.b64encode(file_content).decode('utf-8')
+
+            print(f"File encoded to base64: {len(file_base64)} characters")
+
+            
+            
+            # Build JSON payload with base64 file and profile data for n8n
+
+            json_data = {
+
+                'fileName': fileName,
+
+                'mimeType': mimeType,
+
+                'size': size,
+
+                'tgid': tgid,
+
+                'file': file_base64,  # Base64 encoded image
+
+                'profile': profile_data,  # User profile data from database
+
+                'clientTime': clientTime,  # Client's local time (ISO format with timezone)
+
+            }
+
+            
+            
+            print(f"Building JSON payload for n8n...")
+
+            print(f"JSON keys: {list(json_data.keys())}")
+
+            print(f"JSON size: {len(str(json_data))} characters")
+
+            print(f"Base64 data length: {len(file_base64)} characters")
+
+            print(f"Profile data keys: {list(profile_data.keys()) if profile_data else 'none'}")
+
+            print(f"First 100 chars of base64: {file_base64[:100]}...")
+
+            
+            
+            # Send to n8n webhook
+
+            # IMPORTANT: n8n webhooks should be configured to accept POST, not GET
+
+            # GET requests cannot send file data (URL length limit)
+
+            print(f"Sending POST request with JSON to n8n webhook: {webhook_url}")
+
+            print(f"Payload contains: fileName, mimeType, size, tgid, file (base64), profile")
+
+            print(f"Total payload size: {len(str(json_data))} characters")
+
+            
+            
+            try:
+
+                response = requests.post(
+
+                    webhook_url,
+
+                    json=json_data,
+
+                    headers={
+
+                        'Content-Type': 'application/json',
+
+                    },
+
+                    timeout=60,
+
+                    allow_redirects=True
+
+                )
+
+                
+                
+                print(f"✅ Request sent successfully! Response status: {response.status_code}")
+
+                print(f"Webhook response headers: {dict(response.headers)}")
+
+                response_text = response.text[:500] if response.text else 'No response'
+
+                print(f"Webhook response (first 500 chars): {response_text}")
+
+                
+                
+                # Log response status
+
+                if response.status_code == 404:
+
+                    print(f"⚠️ WARNING: Webhook returned 404. Check n8n webhook settings - it should accept POST requests.")
+
+                elif response.status_code >= 400:
+
+                    print(f"⚠️ WARNING: Webhook returned {response.status_code}. Check n8n webhook configuration.")
+
+                else:
+
+                    print(f"✅ SUCCESS: Webhook accepted request (status {response.status_code})")
+                    
+                    
+
+            except Exception as send_err:
+
+                print(f"❌ ERROR sending to webhook: {send_err}")
+
+                print(traceback.format_exc())
+
+                # Don't fail - we tried to send
+
+                response = type('obj', (object,), {'status_code': 0, 'text': str(send_err)})()
+
+        else:
+
+            print("⚠️ Webhook URL not configured - skipping webhook call, file saved to database only")
+
+            response = type('obj', (object,), {'status_code': None, 'text': 'Webhook not configured'})()
+
         
         
 
-        # Always return success from our side (file was sent to n8n webhook)
+        # Always return success from our side
 
         result = {
 
             "success": True,
 
-            "message": "File sent to n8n webhook",
+            "message": "File sent to n8n webhook" if webhook_url else "File saved to database",
 
             "fileName": fileName,
 
@@ -1324,9 +1348,9 @@ async def upload_file_to_webhook(
 
             "size": size,
 
-            "webhookStatus": response.status_code,
+            "webhookStatus": response.status_code if response else None,
 
-            "webhookResponse": response.text[:1000] if response.text else None,
+            "webhookResponse": response.text[:1000] if response and response.text else None,
 
             "analyses": analyses
 
@@ -1773,164 +1797,12 @@ async def upload_file_to_webhook(
 
     
 
-    if not webhook_url:
-
-        print("ERROR: Webhook URL not configured!")
-
-        raise HTTPException(
-
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-
-            detail="Webhook URL not configured"
-
-        )
-
+    # If webhook is not configured, we'll just save to database and return success
     
 
     try:
 
-        print("Reading file content...")
-
-        # Read file content
-
-        file_content = await file.read()
-
-        print(f"File content read: {len(file_content)} bytes")
-
-        
-
-        print(f"=== Sending file to webhook ===")
-
-        print(f"Webhook URL: {webhook_url}")
-
-        print(f"File: {fileName}, Size: {size} bytes, Type: {mimeType}, TGID: {tgid}")
-
-        
-
-        # Encode file to base64
-
-        import base64
-
-        print("Encoding file to base64...")
-
-        file_base64 = base64.b64encode(file_content).decode('utf-8')
-
-        print(f"File encoded to base64: {len(file_base64)} characters")
-
-        
-
-        # Build JSON payload with base64 file and profile data for n8n
-
-        json_data = {
-
-            'fileName': fileName,
-
-            'mimeType': mimeType,
-
-            'size': size,
-
-            'tgid': tgid,
-
-            'file': file_base64,  # Base64 encoded image
-
-            'profile': profile_data,  # User profile data from database
-
-            'clientTime': clientTime,  # Client's local time (ISO format with timezone)
-
-        }
-
-        
-
-        print(f"Building JSON payload for n8n...")
-
-        print(f"JSON keys: {list(json_data.keys())}")
-
-        print(f"JSON size: {len(str(json_data))} characters")
-
-        print(f"Base64 data length: {len(file_base64)} characters")
-
-        print(f"Profile data keys: {list(profile_data.keys()) if profile_data else 'none'}")
-
-        print(f"First 100 chars of base64: {file_base64[:100]}...")
-
-        
-
-        # Send to n8n webhook
-
-        # IMPORTANT: n8n webhooks should be configured to accept POST, not GET
-
-        # GET requests cannot send file data (URL length limit)
-
-        print(f"Sending POST request with JSON to n8n webhook: {webhook_url}")
-
-        print(f"Payload contains: fileName, mimeType, size, tgid, file (base64), profile")
-
-        print(f"Total payload size: {len(str(json_data))} characters")
-
-        
-
-        try:
-
-            response = requests.post(
-
-                webhook_url,
-
-                json=json_data,
-
-                headers={
-
-                    'Content-Type': 'application/json',
-
-                },
-
-                timeout=60,
-
-                allow_redirects=True
-
-            )
-
-            
-
-            print(f"✅ Request sent successfully! Response status: {response.status_code}")
-
-            print(f"Webhook response headers: {dict(response.headers)}")
-
-            response_text = response.text[:500] if response.text else 'No response'
-
-            print(f"Webhook response (first 500 chars): {response_text}")
-
-            
-
-            # Log response status
-
-            if response.status_code == 404:
-
-                print(f"⚠️ WARNING: Webhook returned 404. Check n8n webhook settings - it should accept POST requests.")
-
-            elif response.status_code >= 400:
-
-                print(f"⚠️ WARNING: Webhook returned {response.status_code}. Check n8n webhook configuration.")
-
-            else:
-
-                print(f"✅ SUCCESS: Webhook accepted request (status {response.status_code})")
-
-                
-
-        except Exception as send_err:
-
-            print(f"❌ ERROR sending to webhook: {send_err}")
-
-            print(traceback.format_exc())
-
-            # Don't fail - we tried to send
-
-            response = type('obj', (object,), {'status_code': 0, 'text': str(send_err)})()
-
-        
-
-        # Update database (try, but don't fail if it doesn't work)
-
+        # Update database first (always do this)
         analyses = {}
 
         try:
@@ -1948,14 +1820,164 @@ async def upload_file_to_webhook(
             print(f"⚠️ Database update failed (non-critical): {db_err}")
 
         
+        # Send to webhook only if configured
+        response = None
+        
+        if webhook_url:
 
-        # Always return success from our side (file was sent to n8n webhook)
+            print("Reading file content...")
+
+            # Read file content
+
+            file_content = await file.read()
+
+            print(f"File content read: {len(file_content)} bytes")
+
+            
+
+            print(f"=== Sending file to webhook ===")
+
+            print(f"Webhook URL: {webhook_url}")
+
+            print(f"File: {fileName}, Size: {size} bytes, Type: {mimeType}, TGID: {tgid}")
+
+            
+
+            # Encode file to base64
+
+            import base64
+
+            print("Encoding file to base64...")
+
+            file_base64 = base64.b64encode(file_content).decode('utf-8')
+
+            print(f"File encoded to base64: {len(file_base64)} characters")
+
+            
+
+            # Build JSON payload with base64 file and profile data for n8n
+
+            json_data = {
+
+                'fileName': fileName,
+
+                'mimeType': mimeType,
+
+                'size': size,
+
+                'tgid': tgid,
+
+                'file': file_base64,  # Base64 encoded image
+
+                'profile': profile_data,  # User profile data from database
+
+                'clientTime': clientTime,  # Client's local time (ISO format with timezone)
+
+            }
+
+            
+
+            print(f"Building JSON payload for n8n...")
+
+            print(f"JSON keys: {list(json_data.keys())}")
+
+            print(f"JSON size: {len(str(json_data))} characters")
+
+            print(f"Base64 data length: {len(file_base64)} characters")
+
+            print(f"Profile data keys: {list(profile_data.keys()) if profile_data else 'none'}")
+
+            print(f"First 100 chars of base64: {file_base64[:100]}...")
+
+            
+
+            # Send to n8n webhook
+
+            # IMPORTANT: n8n webhooks should be configured to accept POST, not GET
+
+            # GET requests cannot send file data (URL length limit)
+
+            print(f"Sending POST request with JSON to n8n webhook: {webhook_url}")
+
+            print(f"Payload contains: fileName, mimeType, size, tgid, file (base64), profile")
+
+            print(f"Total payload size: {len(str(json_data))} characters")
+
+            
+
+            try:
+
+                response = requests.post(
+
+                    webhook_url,
+
+                    json=json_data,
+
+                    headers={
+
+                        'Content-Type': 'application/json',
+
+                    },
+
+                    timeout=60,
+
+                    allow_redirects=True
+
+                )
+
+                
+
+                print(f"✅ Request sent successfully! Response status: {response.status_code}")
+
+                print(f"Webhook response headers: {dict(response.headers)}")
+
+                response_text = response.text[:500] if response.text else 'No response'
+
+                print(f"Webhook response (first 500 chars): {response_text}")
+
+                
+
+                # Log response status
+
+                if response.status_code == 404:
+
+                    print(f"⚠️ WARNING: Webhook returned 404. Check n8n webhook settings - it should accept POST requests.")
+
+                elif response.status_code >= 400:
+
+                    print(f"⚠️ WARNING: Webhook returned {response.status_code}. Check n8n webhook configuration.")
+
+                else:
+
+                    print(f"✅ SUCCESS: Webhook accepted request (status {response.status_code})")
+
+                    
+
+            except Exception as send_err:
+
+                print(f"❌ ERROR sending to webhook: {send_err}")
+
+                print(traceback.format_exc())
+
+                # Don't fail - we tried to send
+
+                response = type('obj', (object,), {'status_code': 0, 'text': str(send_err)})()
+
+        else:
+
+            print("⚠️ Webhook URL not configured - skipping webhook call, file saved to database only")
+
+            response = type('obj', (object,), {'status_code': None, 'text': 'Webhook not configured'})()
+
+        
+
+        # Always return success from our side
 
         result = {
 
             "success": True,
 
-            "message": "File sent to n8n webhook",
+            "message": "File sent to n8n webhook" if webhook_url else "File saved to database",
 
             "fileName": fileName,
 
@@ -1963,9 +1985,9 @@ async def upload_file_to_webhook(
 
             "size": size,
 
-            "webhookStatus": response.status_code,
+            "webhookStatus": response.status_code if response else None,
 
-            "webhookResponse": response.text[:1000] if response.text else None,
+            "webhookResponse": response.text[:1000] if response and response.text else None,
 
             "analyses": analyses
 

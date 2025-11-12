@@ -75,6 +75,7 @@ class HealthApp(Base):
     recommendations = Column(JSONB, default={}, nullable=False)
     allanalize = Column(JSONB, default={}, nullable=False)  # История всех анализов от ИИ
     rekom = Column(JSONB, default={}, nullable=False)  # Рекомендации по добавкам для каждого анализа
+    opros_anemia = Column(JSONB, default={}, nullable=False)  # Опросник на дефицит железа
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
