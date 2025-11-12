@@ -208,6 +208,45 @@ def update_recommendations(db: Session, tgid: str, recommendations: Dict[str, An
     return user
 
 
+def update_opros_anemia(db: Session, tgid: str, opros_data: Dict[str, Any]) -> HealthApp:
+    """Update opros_anemia (iron deficiency questionnaire)"""
+    print(f"[update_opros_anemia] Starting update for tgid: {tgid}")
+    print(f"[update_opros_anemia] Received opros data: {opros_data}")
+    
+    user = get_or_create_user(db, tgid)
+    
+    # Get current opros_anemia and create a copy
+    current_opros = user.opros_anemia or {}
+    if not isinstance(current_opros, dict):
+        current_opros = {}
+        print(f"[update_opros_anemia] Warning: opros_anemia was not a dict, resetting to empty dict")
+    
+    # Create a new dict by copying current and updating with new data
+    updated_opros = copy.deepcopy(current_opros)
+    updated_opros.update(opros_data)
+    
+    # Add timestamp
+    updated_opros['updated_at'] = datetime.utcnow().isoformat()
+    
+    # Create a completely new dict object to ensure SQLAlchemy detects the change
+    new_opros = dict(updated_opros)
+    user.opros_anemia = new_opros
+    user.updated_at = datetime.utcnow()
+    
+    # Explicitly mark the JSONB column as modified
+    flag_modified(user, "opros_anemia")
+    
+    db.flush()
+    print(f"[update_opros_anemia] After flush, user.opros_anemia keys: {list(user.opros_anemia.keys()) if isinstance(user.opros_anemia, dict) else 'not a dict'}")
+    
+    db.commit()
+    db.refresh(user)
+    
+    print(f"[update_opros_anemia] After commit, user.opros_anemia keys: {list(user.opros_anemia.keys()) if isinstance(user.opros_anemia, dict) else 'not a dict'}")
+    
+    return user
+
+
 def get_rekom_for_analysis(db: Session, tgid: str, analysis_id: str) -> Dict[str, Any]:
     """Get recommendation for specific analysis from rekom column or base.txt"""
     user = get_or_create_user(db, tgid)

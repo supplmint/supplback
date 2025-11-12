@@ -22,6 +22,8 @@ from app.middleware.auth import get_tgid_from_header
 
 from app.config import settings
 
+from app.utils.pdf_extractor import extract_text_from_pdf
+
 import traceback
 
 
@@ -79,6 +81,10 @@ class UpdateAnalysesRequest(BaseModel):
 class UpdateRecommendationsRequest(BaseModel):
 
     recommendations: Dict[str, Any]
+
+
+class UpdateOprosAnemiaRequest(BaseModel):
+    opros_anemia: Dict[str, Any]
 
 
 
@@ -158,6 +164,31 @@ async def get_analyses_history(
     else:
 
         return {"analyses": []}
+
+
+# GET /api/opros/history - Get questionnaires history from opros_anemia column
+
+@router.get("/opros/history")
+
+async def get_opros_history(
+
+    tgid: str = Depends(get_tgid_from_header),
+
+    db: Session = Depends(get_db)
+
+):
+
+    """Get questionnaires history from opros_anemia column"""
+
+    user = queries.get_or_create_user(db, tgid)
+
+    opros_data = user.opros_anemia or {}
+
+    
+
+    # Return the opros_anemia data
+
+    return {"opros": opros_data}
 
 
 
@@ -360,6 +391,27 @@ async def update_recommendations(
     }
 
 
+# POST /api/opros/anemia - Update iron deficiency questionnaire
+
+@router.post("/opros/anemia")
+
+async def update_opros_anemia(
+
+    request: UpdateOprosAnemiaRequest,
+
+    tgid: str = Depends(get_tgid_from_header),
+
+    db: Session = Depends(get_db)
+
+):
+
+    user = queries.update_opros_anemia(db, tgid, request.opros_anemia)
+
+    return {
+
+        "opros_anemia": user.opros_anemia or {}
+
+    }
 
 
 # POST /api/recommendations/get - Get recommendation by sending analysis text to webhook
@@ -1172,6 +1224,17 @@ async def upload_file_to_webhook(
 
             
             
+            # Extract text from PDF if it's a PDF file
+            extracted_text = None
+            if mimeType == "application/pdf":
+                print("📄 PDF file detected - extracting text...")
+                extracted_text = extract_text_from_pdf(file_content)
+                if extracted_text:
+                    print(f"✅ Extracted {len(extracted_text)} characters from PDF")
+                else:
+                    print("⚠️ Warning: Could not extract text from PDF, will send file as-is")
+            
+            
             print(f"=== Sending file to webhook ===")
 
             print(f"Webhook URL: {webhook_url}")
@@ -1204,13 +1267,18 @@ async def upload_file_to_webhook(
 
                 'tgid': tgid,
 
-                'file': file_base64,  # Base64 encoded image
+                'file': file_base64,  # Base64 encoded file (image or PDF)
 
                 'profile': profile_data,  # User profile data from database
 
                 'clientTime': clientTime,  # Client's local time (ISO format with timezone)
 
             }
+
+            # Add extracted text if PDF
+            if extracted_text:
+                json_data['extractedText'] = extracted_text
+                print(f"✅ Added extracted text to payload ({len(extracted_text)} characters)")
 
             
             
@@ -1221,7 +1289,8 @@ async def upload_file_to_webhook(
             print(f"JSON size: {len(str(json_data))} characters")
 
             print(f"Base64 data length: {len(file_base64)} characters")
-
+            if extracted_text:
+                print(f"Extracted text length: {len(extracted_text)} characters")
             print(f"Profile data keys: {list(profile_data.keys()) if profile_data else 'none'}")
 
             print(f"First 100 chars of base64: {file_base64[:100]}...")
@@ -1236,10 +1305,13 @@ async def upload_file_to_webhook(
 
             print(f"Sending POST request with JSON to n8n webhook: {webhook_url}")
 
-            print(f"Payload contains: fileName, mimeType, size, tgid, file (base64), profile")
+            payload_description = "fileName, mimeType, size, tgid, file (base64), profile"
+            if extracted_text:
+                payload_description += ", extractedText"
+            print(f"Payload contains: {payload_description}")
 
             print(f"Total payload size: {len(str(json_data))} characters")
-
+            
             
             
             try:
@@ -1809,6 +1881,17 @@ async def upload_file_to_webhook(
             print(f"File content read: {len(file_content)} bytes")
 
             
+            
+            # Extract text from PDF if it's a PDF file
+            extracted_text = None
+            if mimeType == "application/pdf":
+                print("📄 PDF file detected - extracting text...")
+                extracted_text = extract_text_from_pdf(file_content)
+                if extracted_text:
+                    print(f"✅ Extracted {len(extracted_text)} characters from PDF")
+                else:
+                    print("⚠️ Warning: Could not extract text from PDF, will send file as-is")
+            
 
             print(f"=== Sending file to webhook ===")
 
@@ -1842,13 +1925,18 @@ async def upload_file_to_webhook(
 
                 'tgid': tgid,
 
-                'file': file_base64,  # Base64 encoded image
+                'file': file_base64,  # Base64 encoded file (image or PDF)
 
                 'profile': profile_data,  # User profile data from database
 
                 'clientTime': clientTime,  # Client's local time (ISO format with timezone)
 
             }
+
+            # Add extracted text if PDF
+            if extracted_text:
+                json_data['extractedText'] = extracted_text
+                print(f"✅ Added extracted text to payload ({len(extracted_text)} characters)")
 
             
 
@@ -1859,7 +1947,8 @@ async def upload_file_to_webhook(
             print(f"JSON size: {len(str(json_data))} characters")
 
             print(f"Base64 data length: {len(file_base64)} characters")
-
+            if extracted_text:
+                print(f"Extracted text length: {len(extracted_text)} characters")
             print(f"Profile data keys: {list(profile_data.keys()) if profile_data else 'none'}")
 
             print(f"First 100 chars of base64: {file_base64[:100]}...")
@@ -1874,7 +1963,10 @@ async def upload_file_to_webhook(
 
             print(f"Sending POST request with JSON to n8n webhook: {webhook_url}")
 
-            print(f"Payload contains: fileName, mimeType, size, tgid, file (base64), profile")
+            payload_description = "fileName, mimeType, size, tgid, file (base64), profile"
+            if extracted_text:
+                payload_description += ", extractedText"
+            print(f"Payload contains: {payload_description}")
 
             print(f"Total payload size: {len(str(json_data))} characters")
 
