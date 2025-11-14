@@ -106,7 +106,7 @@ class GetRecommendationRequest(BaseModel):
 
 
 class GetRecommendationByTextRequest(BaseModel):
-    analysis_text: str
+    analysis_text: Optional[str] = None
     analysis_id: Optional[str] = None
 
 
@@ -421,7 +421,9 @@ async def get_recommendation(
     tgid: str = Depends(get_tgid_from_header),
     db: Session = Depends(get_db)
 ):
-    """Get recommendation by sending analysis text to AI webhook"""
+    """Get recommendation by sending analysis text to AI webhook.
+    If analysis_text is not provided, will get all analyses from database and combine them.
+    """
     webhook_url = settings.RECOMMENDATIONS_WEBHOOK_URL
     
     if not webhook_url:
@@ -430,9 +432,47 @@ async def get_recommendation(
             detail="Recommendations webhook URL not configured"
         )
     
-    # Check if recommendation exists in rekom
-    analysis_id = request.analysis_id or f"analysis_{tgid}_{int(datetime.utcnow().timestamp())}"
     user = queries.get_or_create_user(db, tgid)
+    
+    # If analysis_text is not provided, get all analyses from database
+    if not request.analysis_text:
+        # Get all analyses from allanalize
+        all_analyses = user.allanalize or {}
+        analyses_list = []
+        
+        # Handle different allanalize formats
+        if isinstance(all_analyses, list):
+            analyses_list = all_analyses
+        elif isinstance(all_analyses, dict):
+            if "analyses" in all_analyses and isinstance(all_analyses["analyses"], list):
+                analyses_list = all_analyses["analyses"]
+            elif "history" in all_analyses and isinstance(all_analyses["history"], list):
+                analyses_list = all_analyses["history"]
+        
+        # Combine all analysis texts
+        analysis_texts = []
+        for analysis in analyses_list:
+            if isinstance(analysis, dict):
+                text = analysis.get("text") or analysis.get("report") or ""
+                if text and text.strip():
+                    # Add separator with analysis info
+                    file_name = analysis.get("fileName") or analysis.get("file_name") or "Анализ"
+                    created_at = analysis.get("createdAt") or analysis.get("created_at") or ""
+                    analysis_texts.append(f"\n\n=== {file_name} {created_at} ===\n{text}")
+        
+        if not analysis_texts:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Нет загруженных анализов. Загрузите анализы, чтобы получить рекомендации."
+            )
+        
+        combined_analysis_text = "\n".join(analysis_texts)
+        analysis_id = request.analysis_id or f"all_analyses_{tgid}_{int(datetime.utcnow().timestamp())}"
+    else:
+        combined_analysis_text = request.analysis_text
+        analysis_id = request.analysis_id or f"analysis_{tgid}_{int(datetime.utcnow().timestamp())}"
+    
+    # Check if recommendation exists in rekom
     rekom_data = user.rekom or {}
     
     # Check if recommendation already exists in rekom
@@ -450,7 +490,7 @@ async def get_recommendation(
     try:
         webhook_payload = {
             "tgid": tgid,
-            "analysis_text": request.analysis_text,
+            "analysis_text": combined_analysis_text,
             "analysis_id": analysis_id,
             "profile": {
                 "height": profile.get("height"),
@@ -461,7 +501,7 @@ async def get_recommendation(
         }
         
         print(f"Sending analysis text to recommendations webhook: {webhook_url}")
-        print(f"Analysis text length: {len(request.analysis_text)} characters")
+        print(f"Analysis text length: {len(combined_analysis_text)} characters")
         print(f"Webhook will send result back via HTTP Request to /api/recommendations/result")
         
         # Send to webhook (don't wait for response - webhook will send result via HTTP Request)
