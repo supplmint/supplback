@@ -467,7 +467,8 @@ async def get_recommendation(
             )
         
         combined_analysis_text = "\n".join(analysis_texts)
-        analysis_id = request.analysis_id or f"all_analyses_{tgid}_{int(datetime.utcnow().timestamp())}"
+        # Use fixed analysis_id for all analyses to allow saving and loading recommendations
+        analysis_id = request.analysis_id or f"all_analyses_{tgid}"
     else:
         combined_analysis_text = request.analysis_text
         analysis_id = request.analysis_id or f"analysis_{tgid}_{int(datetime.utcnow().timestamp())}"
@@ -566,17 +567,32 @@ async def receive_recommendation_result(
         user.rekom = rekom_data
         from sqlalchemy.orm.attributes import flag_modified
         flag_modified(user, "rekom")
+        
+        # Also save to recommendations column with timestamp
+        recommendations_data = user.recommendations or {}
+        if not isinstance(recommendations_data, dict):
+            recommendations_data = {}
+        
+        # Save recommendation with timestamp
+        recommendations_data["last_recommendation"] = {
+            "text": request.recommendation,
+            "analysis_id": request.analysis_id,
+            "created_at": datetime.utcnow().isoformat()
+        }
+        user.recommendations = recommendations_data
+        flag_modified(user, "recommendations")
+        
         user.updated_at = datetime.utcnow()
         
         db.commit()
         db.refresh(user)
         
-        print(f"✅ Recommendation saved to rekom for user {request.tgid}")
+        print(f"✅ Recommendation saved to rekom and recommendations for user {request.tgid}")
         print(f"Analysis ID: {request.analysis_id}")
         
         return {
             "success": True,
-            "message": "Recommendation saved to rekom",
+            "message": "Recommendation saved to rekom and recommendations",
             "tgid": request.tgid,
             "analysis_id": request.analysis_id,
             "recommendation_length": len(request.recommendation)
@@ -612,6 +628,31 @@ async def get_recommendation_by_id(
         "analysis_id": analysis_id,
         "status": "processing",
         "message": "Recommendation is being processed"
+    }
+
+
+# GET /api/recommendations/last - Get last recommendation from recommendations column
+@router.get("/recommendations/last")
+async def get_last_recommendation(
+    tgid: str = Depends(get_tgid_from_header),
+    db: Session = Depends(get_db)
+):
+    """Get last recommendation from recommendations column"""
+    user = queries.get_or_create_user(db, tgid)
+    recommendations_data = user.recommendations or {}
+    
+    if isinstance(recommendations_data, dict) and "last_recommendation" in recommendations_data:
+        last_rec = recommendations_data["last_recommendation"]
+        return {
+            "recommendation": last_rec.get("text", ""),
+            "analysis_id": last_rec.get("analysis_id", ""),
+            "created_at": last_rec.get("created_at", ""),
+            "status": "ready"
+        }
+    
+    return {
+        "status": "not_found",
+        "message": "No recommendation found"
     }
 
 
