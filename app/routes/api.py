@@ -108,6 +108,7 @@ class GetRecommendationRequest(BaseModel):
 class GetRecommendationByTextRequest(BaseModel):
     analysis_text: Optional[str] = None
     analysis_id: Optional[str] = None
+    force_new: Optional[bool] = False  # Если True, игнорировать кеш и всегда отправлять запрос на вебхук
 
 
 class RecommendationResultRequest(BaseModel):
@@ -473,16 +474,17 @@ async def get_recommendation(
         combined_analysis_text = request.analysis_text
         analysis_id = request.analysis_id or f"analysis_{tgid}_{int(datetime.utcnow().timestamp())}"
     
-    # Check if recommendation exists in rekom
-    rekom_data = user.rekom or {}
-    
-    # Check if recommendation already exists in rekom
-    if isinstance(rekom_data, dict) and analysis_id in rekom_data:
-        return {
-            "analysis_id": analysis_id,
-            "recommendation": rekom_data[analysis_id],
-            "cached": True
-        }
+    # Check if recommendation exists in rekom (skip if force_new is True)
+    if not request.force_new:
+        rekom_data = user.rekom or {}
+        
+        # Check if recommendation already exists in rekom
+        if isinstance(rekom_data, dict) and analysis_id in rekom_data:
+            return {
+                "analysis_id": analysis_id,
+                "recommendation": rekom_data[analysis_id],
+                "cached": True
+            }
     
     # Get user profile data
     profile = user.profile or {}
