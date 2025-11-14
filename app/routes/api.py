@@ -476,15 +476,15 @@ async def get_recommendation(
     
     # Check if recommendation exists in rekom (skip if force_new is True)
     if not request.force_new:
-    rekom_data = user.rekom or {}
-    
-    # Check if recommendation already exists in rekom
-    if isinstance(rekom_data, dict) and analysis_id in rekom_data:
-        return {
-            "analysis_id": analysis_id,
-            "recommendation": rekom_data[analysis_id],
-            "cached": True
-        }
+        rekom_data = user.rekom or {}
+        
+        # Check if recommendation already exists in rekom
+        if isinstance(rekom_data, dict) and analysis_id in rekom_data:
+            return {
+                "analysis_id": analysis_id,
+                "recommendation": rekom_data[analysis_id],
+                "cached": True
+            }
     
     # Get user profile data
     profile = user.profile or {}
