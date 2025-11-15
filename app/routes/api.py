@@ -485,6 +485,17 @@ async def get_recommendation(
                 "recommendation": rekom_data[analysis_id],
                 "cached": True
             }
+    else:
+        # force_new=True - удаляем старую рекомендацию из rekom, чтобы она не возвращалась
+        rekom_data = user.rekom or {}
+        if isinstance(rekom_data, dict) and analysis_id in rekom_data:
+            print(f"🔄 force_new=True: удаляем старую рекомендацию для analysis_id={analysis_id}")
+            del rekom_data[analysis_id]
+            user.rekom = rekom_data
+            from sqlalchemy.orm.attributes import flag_modified
+            flag_modified(user, "rekom")
+            db.commit()
+            db.refresh(user)
     
     # Get user profile data
     profile = user.profile or {}
