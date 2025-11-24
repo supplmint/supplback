@@ -450,22 +450,55 @@ async def get_recommendation(
             elif "history" in all_analyses and isinstance(all_analyses["history"], list):
                 analyses_list = all_analyses["history"]
         
-        # Combine all analysis texts
-        analysis_texts = []
+        # Prepare analyses with their dates for sorting
+        analyses_with_dates = []
         for analysis in analyses_list:
             if isinstance(analysis, dict):
                 text = analysis.get("text") or analysis.get("report") or ""
                 if text and text.strip():
-                    # Add separator with analysis info
                     file_name = analysis.get("fileName") or analysis.get("file_name") or "Анализ"
                     created_at = analysis.get("createdAt") or analysis.get("created_at") or ""
-                    analysis_texts.append(f"\n\n=== {file_name} {created_at} ===\n{text}")
+                    
+                    # Try to parse date for sorting
+                    sort_date = None
+                    if created_at:
+                        try:
+                            # Try ISO format first
+                            sort_date = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
+                        except:
+                            try:
+                                # Try other common formats
+                                sort_date = datetime.strptime(created_at, "%Y-%m-%dT%H:%M:%S.%f%z")
+                            except:
+                                try:
+                                    sort_date = datetime.strptime(created_at, "%Y-%m-%d %H:%M:%S")
+                                except:
+                                    # If parsing fails, use current time (will be sorted last)
+                                    sort_date = datetime.min
+                    else:
+                        sort_date = datetime.min
+                    
+                    analyses_with_dates.append({
+                        "file_name": file_name,
+                        "created_at": created_at,
+                        "text": text,
+                        "sort_date": sort_date
+                    })
         
-        if not analysis_texts:
+        if not analyses_with_dates:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Нет загруженных анализов. Загрузите анализы, чтобы получить рекомендации."
             )
+        
+        # Sort by date (newest first) and take only last 5
+        analyses_with_dates.sort(key=lambda x: x["sort_date"], reverse=True)
+        last_5_analyses = analyses_with_dates[:5]
+        
+        # Combine last 5 analysis texts
+        analysis_texts = []
+        for analysis in last_5_analyses:
+            analysis_texts.append(f"\n\n=== {analysis['file_name']} {analysis['created_at']} ===\n{analysis['text']}")
         
         combined_analysis_text = "\n".join(analysis_texts)
         # Use fixed analysis_id for all analyses to allow saving and loading recommendations
